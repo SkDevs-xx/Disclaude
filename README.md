@@ -21,8 +21,7 @@ Discord × Claude Code CLI で動く自律型 AI ボット。
 
 - **Git** — `git --version` で確認。なければ `sudo apt install git`
 - **Python 3.12 以上** — `python3 --version` で確認
-- **Node.js / npm** — Claude Code CLI のインストールに必要。`node --version` で確認。なければ [公式](https://nodejs.org/) からインストール
-- **Claude Code CLI** — [公式ドキュメント](https://docs.anthropic.com/en/docs/claude-code) に従ってインストール・認証まで済ませておく
+- **Claude Code CLI** — セットアップ手順内でインストールする
 - **Discord Bot Token** — [Discord Developer Portal](https://discord.com/developers/applications) で Bot を作成して取得
 
 ## セットアップ
@@ -64,11 +63,15 @@ exit
 ```
 
 ### 3. Claude Code CLI のインストール
+
+自分の PC に Claude Code があっても、サーバーの disclaude ユーザーには別途インストールが必要。disclaude ユーザーで実行:
+
 ```bash
-sudo npm install -g @anthropic-ai/claude-code
-su - disclaude
+curl -fsSL https://claude.ai/install.sh | sh
 claude
 ```
+
+> PATH の警告が出たら: `echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc && source ~/.bashrc`
 
 > `claude` を実行するとブラウザが開く。VPS の場合は表示される URL を手元の PC で開く。
 
