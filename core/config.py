@@ -18,29 +18,29 @@ _tl = threading.local()
 # 定数
 # ─────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent.parent
-WORKFLOW_DIR = BASE_DIR / "workspace"
-MEMORY_DIR = WORKFLOW_DIR / "memory"
-SCHEDULES_FILE = WORKFLOW_DIR / "schedules" / "schedules.json"
-ATTACHMENTS_DIR = WORKFLOW_DIR / "temp"
-TMP_DIR = WORKFLOW_DIR / "temp"
 CONFIG_FILE = BASE_DIR / "config.json"
-PLATFORM_NAME: str = ""                         # "discord" | "slack" | "notion"
-SOUL_FILE = WORKFLOW_DIR / "SOUL.md"
-USER_FILE = WORKFLOW_DIR / "USER.md"
-CHANNEL_NAMES_FILE = WORKFLOW_DIR / "channel_names.json"
-SESSIONS_FILE = WORKFLOW_DIR / "sessions.json"
 CLAUDE_MD_FILE = BASE_DIR / "CLAUDE.md"
 LOG_FILE = BASE_DIR / "bot.log"
 
+# スレッドローカルで管理するワークスペース変数のデフォルト値
+_default_ws = BASE_DIR / "workspace"
+_WORKSPACE_DEFAULTS: dict[str, object] = {
+    "PLATFORM_NAME": "",
+    "WORKFLOW_DIR": _default_ws,
+    "MEMORY_DIR": _default_ws / "memory",
+    "SCHEDULES_FILE": _default_ws / "schedules" / "schedules.json",
+    "ATTACHMENTS_DIR": _default_ws / "temp",
+    "TMP_DIR": _default_ws / "temp",
+    "CHANNEL_NAMES_FILE": _default_ws / "channel_names.json",
+    "SESSIONS_FILE": _default_ws / "sessions.json",
+    "SOUL_FILE": _default_ws / "SOUL.md",
+    "USER_FILE": _default_ws / "USER.md",
+}
+
+
 def init_workspace(workspace_dir: Path) -> None:
     """起動時にプラットフォーム固有の workspace パスをスレッドローカルに設定する。"""
-    global WORKFLOW_DIR, MEMORY_DIR, SCHEDULES_FILE, ATTACHMENTS_DIR, TMP_DIR
-    global CHANNEL_NAMES_FILE, SESSIONS_FILE, SOUL_FILE, USER_FILE
-    global PLATFORM_NAME
-
     platform = workspace_dir.parent.name
-
-    # スレッドローカルに設定（並列起動時の競合防止）
     _tl.PLATFORM_NAME = platform
     _tl.WORKFLOW_DIR = workspace_dir
     _tl.MEMORY_DIR = workspace_dir / "memory"
@@ -52,22 +52,20 @@ def init_workspace(workspace_dir: Path) -> None:
     _tl.SOUL_FILE = workspace_dir / "SOUL.md"
     _tl.USER_FILE = workspace_dir / "USER.md"
 
-    # グローバルも更新（後方互換・単一プラットフォーム起動時用）
-    PLATFORM_NAME = platform
-    WORKFLOW_DIR = workspace_dir
-    MEMORY_DIR = workspace_dir / "memory"
-    SCHEDULES_FILE = workspace_dir / "schedules" / "schedules.json"
-    ATTACHMENTS_DIR = workspace_dir / "temp"
-    TMP_DIR = workspace_dir / "temp"
-    CHANNEL_NAMES_FILE = workspace_dir / "channel_names.json"
-    SESSIONS_FILE = workspace_dir / "sessions.json"
-    SOUL_FILE = workspace_dir / "SOUL.md"
-    USER_FILE = workspace_dir / "USER.md"
-
 
 def _tl_get(attr: str):
-    """スレッドローカル変数を返す。未設定の場合はモジュールグローバルを返す。"""
-    return getattr(_tl, attr, globals()[attr])
+    """スレッドローカル変数を返す。未設定の場合はデフォルト値を返す。"""
+    return getattr(_tl, attr, _WORKSPACE_DEFAULTS[attr])
+
+
+def __getattr__(name: str):
+    """モジュール属性アクセスをスレッドローカルにディスパッチする。
+
+    _cfg.WORKFLOW_DIR のように直接参照しても、スレッドローカル値が返る。
+    """
+    if name in _WORKSPACE_DEFAULTS:
+        return _tl_get(name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 CLAUDE_BIN = shutil.which("claude") or str(Path.home() / ".local" / "bin" / "claude")
