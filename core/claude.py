@@ -20,7 +20,10 @@ from core.config import (
     get_skip_permissions,
 )
 
-logger = logging.getLogger("discord_bot")
+def _logger() -> logging.Logger:
+    from core.config import _tl_get
+    name = _tl_get("PLATFORM_NAME")
+    return logging.getLogger(f"{name}_bot" if name else "discord_bot")
 
 
 async def run_claude(
@@ -58,7 +61,7 @@ async def run_claude(
             cmd += ["--resume", session_id]
 
     total_len = len(prompt) + (len(skill_instructions) if skill_instructions else 0)
-    logger.info("claude: model=%s thinking=%s prompt_len=%d timeout=%ds", model, thinking, total_len, timeout)
+    _logger().info("claude: model=%s thinking=%s prompt_len=%d timeout=%ds", model, thinking, total_len, timeout)
 
     env = dict(os.environ)
     if skill_instructions:
@@ -80,7 +83,7 @@ async def run_claude(
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         if proc.returncode != 0:
             err = stderr.decode("utf-8", errors="replace").strip()
-            logger.error("claude error (rc=%d): %s", proc.returncode, err)
+            _logger().error("claude error (rc=%d): %s", proc.returncode, err)
             err_lower = err.lower()
             if any(kw in err_lower for kw in ("usage limit", "rate limit", "quota", "plan limit", "exceeded")):
                 return "現在、プランの使用制限に達しているため利用できません。しばらく時間をおいてから再度お試しください。", False

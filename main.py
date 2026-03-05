@@ -16,23 +16,43 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from core.config import BASE_DIR, LOG_FILE, init_workspace
+from core.config import BASE_DIR, LOG_DIR, init_workspace
 
-logger = logging.getLogger("discord_bot")
+logger = logging.getLogger("disclaude")
 
 
 def _setup_logging():
     """ロガーを設定する。"""
-    fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-    fh = RotatingFileHandler(LOG_FILE, maxBytes=10 * 1024 * 1024, backupCount=3, encoding="utf-8")
-    fh.setFormatter(fmt)
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    fmt = logging.Formatter("%(asctime)s [%(levelname)s] [%(name)s] %(message)s")
     sh = logging.StreamHandler()
     sh.setFormatter(fmt)
-    for name in ("discord_bot", "slack_bot", "browser.manager"):
+
+    # 起動時エラー用（プラットフォーム未確定）
+    lg_main = logging.getLogger("disclaude")
+    lg_main.setLevel(logging.INFO)
+    lg_main.addHandler(sh)
+
+    # discord.log: discord_bot + browser.manager
+    discord_fh = RotatingFileHandler(
+        LOG_DIR / "discord.log", maxBytes=10 * 1024 * 1024, backupCount=3, encoding="utf-8"
+    )
+    discord_fh.setFormatter(fmt)
+    for name in ("discord_bot", "browser.manager"):
         lg = logging.getLogger(name)
         lg.setLevel(logging.INFO)
-        lg.addHandler(fh)
+        lg.addHandler(discord_fh)
         lg.addHandler(sh)
+
+    # slack.log: slack_bot のみ
+    slack_fh = RotatingFileHandler(
+        LOG_DIR / "slack.log", maxBytes=10 * 1024 * 1024, backupCount=3, encoding="utf-8"
+    )
+    slack_fh.setFormatter(fmt)
+    lg_slack = logging.getLogger("slack_bot")
+    lg_slack.setLevel(logging.INFO)
+    lg_slack.addHandler(slack_fh)
+    lg_slack.addHandler(sh)
 
 
 def _init_workspace_cmd(platform: str, from_platform: str):

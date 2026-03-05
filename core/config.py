@@ -20,7 +20,7 @@ _tl = threading.local()
 BASE_DIR = Path(__file__).parent.parent
 CONFIG_FILE = BASE_DIR / "config.json"
 CLAUDE_MD_FILE = BASE_DIR / "CLAUDE.md"
-LOG_FILE = BASE_DIR / "bot.log"
+LOG_DIR = BASE_DIR / "log"
 
 # スレッドローカルで管理するワークスペース変数のデフォルト値
 _default_ws = BASE_DIR / "workspace"
@@ -72,7 +72,9 @@ CLAUDE_BIN = shutil.which("claude") or str(Path.home() / ".local" / "bin" / "cla
 TIMEOUT_FAST = 180
 TIMEOUT_PLANNING = 300
 
-logger = logging.getLogger("discord_bot")
+def _logger() -> "logging.Logger":
+    name = _tl_get("PLATFORM_NAME")
+    return logging.getLogger(f"{name}_bot" if name else "disclaude")
 
 
 def _atomic_write_json(path: Path, data) -> None:
@@ -95,34 +97,37 @@ def _atomic_write_json(path: Path, data) -> None:
 # 設定管理
 # ─────────────────────────────────────────────
 
+_config_lock = threading.Lock()
 _config_cache: dict | None = None
 _config_mtime: float = 0.0
 
 def load_config() -> dict:
     global _config_cache, _config_mtime
-    try:
-        mtime = os.path.getmtime(CONFIG_FILE)
-    except OSError:
-        mtime = 0.0
-    if _config_cache is not None and mtime == _config_mtime:
+    with _config_lock:
+        try:
+            mtime = os.path.getmtime(CONFIG_FILE)
+        except OSError:
+            mtime = 0.0
+        if _config_cache is not None and mtime == _config_mtime:
+            return _config_cache
+        if not CONFIG_FILE.exists():
+            _config_cache = {}
+            _config_mtime = 0.0
+            return _config_cache
+        with open(CONFIG_FILE, encoding="utf-8") as f:
+            _config_cache = json.load(f)
+        _config_mtime = mtime
         return _config_cache
-    if not CONFIG_FILE.exists():
-        _config_cache = {}
-        _config_mtime = 0.0
-        return _config_cache
-    with open(CONFIG_FILE, encoding="utf-8") as f:
-        _config_cache = json.load(f)
-    _config_mtime = mtime
-    return _config_cache
 
 def get_skip_permissions() -> bool:
     return load_platform_config().get("skip_permissions", True)
 
 def save_config(cfg: dict) -> None:
     global _config_cache, _config_mtime
-    _atomic_write_json(CONFIG_FILE, cfg)
-    _config_cache = cfg
-    _config_mtime = os.path.getmtime(CONFIG_FILE)
+    with _config_lock:
+        _atomic_write_json(CONFIG_FILE, cfg)
+        _config_cache = cfg
+        _config_mtime = os.path.getmtime(CONFIG_FILE)
 
 
 # ─────────────────────────────────────────────
@@ -139,7 +144,7 @@ def load_platform_config() -> dict:
 def save_platform_config(cfg: dict) -> None:
     name = _tl_get("PLATFORM_NAME")
     if not name:
-        logger.error("save_platform_config: PLATFORM_NAME is not set")
+        _logger().error("save_platform_config: PLATFORM_NAME is not set")
         return
     full_cfg = load_config()
     full_cfg[name] = cfg

@@ -336,7 +336,6 @@ async def _notify(bot: "SlackBot", channel_id_str: str | None, message: str, *, 
                 return
 
     if not skip_dedup:
-        msg_hash = hashlib.md5(message[:200].encode()).hexdigest()
         _sent_warnings[msg_hash] = now
 
     client = bot.app.client
