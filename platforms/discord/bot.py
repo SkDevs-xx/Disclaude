@@ -87,9 +87,11 @@ class ClaudeBot(commands.Bot):
             import os
             port = platform_cfg.get("browser_cdp_port", 9222)
             novnc_port = platform_cfg.get("browser_novnc_port", 6080)
+            vnc_port = platform_cfg.get("browser_vnc_port", 5900)
+            vnc_display = platform_cfg.get("browser_vnc_display", ":99")
             novnc_bind = load_config().get("novnc_bind_address", "localhost")
             profile_dir = os.path.expanduser("~/.config/disclaude-chrome-discord")
-            self.browser_manager = BrowserManager(cdp_port=port, novnc_port=novnc_port, novnc_bind=novnc_bind, profile_dir=profile_dir)
+            self.browser_manager = BrowserManager(cdp_port=port, vnc_port=vnc_port, novnc_port=novnc_port, novnc_bind=novnc_bind, profile_dir=profile_dir, display=vnc_display)
             await self.browser_manager.start()
 
     def _reload_schedules(self):

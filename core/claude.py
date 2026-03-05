@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -58,6 +60,12 @@ async def run_claude(
     total_len = len(prompt) + (len(skill_instructions) if skill_instructions else 0)
     logger.info("claude: model=%s thinking=%s prompt_len=%d timeout=%ds", model, thinking, total_len, timeout)
 
+    env = dict(os.environ)
+    if skill_instructions:
+        m = re.search(r"\[platform:\s*(\w+)\]", skill_instructions)
+        if m:
+            env["DISCLAUDE_PLATFORM"] = m.group(1)
+
     proc: asyncio.subprocess.Process | None = None
     try:
         proc = await asyncio.create_subprocess_exec(
@@ -65,6 +73,7 @@ async def run_claude(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(BASE_DIR),
+            env=env,
         )
         if on_process is not None:
             on_process(proc)

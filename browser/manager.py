@@ -15,7 +15,7 @@ VNC_PASSWD_FILE = os.path.expanduser("~/.vnc/passwd")
 
 class BrowserManager:
 
-    def __init__(self, cdp_port: int = 9222, vnc_port: int = 5900, novnc_port: int = 6080, novnc_bind: str = "localhost", profile_dir: str | None = None):
+    def __init__(self, cdp_port: int = 9222, vnc_port: int = 5900, novnc_port: int = 6080, novnc_bind: str = "localhost", profile_dir: str | None = None, display: str = ":99"):
         self.cdp_port = cdp_port
         self.vnc_port = vnc_port
         self.novnc_port = novnc_port
@@ -24,7 +24,7 @@ class BrowserManager:
         self._chrome_proc: asyncio.subprocess.Process | None = None
         self._novnc_proc: asyncio.subprocess.Process | None = None
         self._watcher: asyncio.Task | None = None
-        self._display = ":99"
+        self._display = display
         self._profile_dir = profile_dir or DEFAULT_PROFILE_DIR
 
     async def start(self) -> None:
@@ -34,8 +34,10 @@ class BrowserManager:
             logger.info("Chrome CDP already responding on port %d, skipping launch", self.cdp_port)
             return
 
-        # DISPLAY が未設定なら Xtigervnc を起動（Xvfb + VNC を 1 プロセスで兼ねる）
-        if not os.environ.get("DISPLAY"):
+        # Xtigervnc を起動（ディスプレイのロックファイルがなければ）
+        display_num = self._display.lstrip(":")
+        lock_file = f"/tmp/.X{display_num}-lock"
+        if not os.path.exists(lock_file):
             if not shutil.which("Xtigervnc"):
                 logger.warning("Xtigervnc not found — install with: sudo apt install tigervnc-standalone-server")
                 return
@@ -52,10 +54,11 @@ class BrowserManager:
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.DEVNULL,
             )
-            os.environ["DISPLAY"] = self._display
             await asyncio.sleep(1)
             logger.info("Xtigervnc started on %s, VNC port %d (pid=%d)",
                         self._display, self.vnc_port, self._xvnc_proc.pid)
+        else:
+            logger.info("Xtigervnc already running on %s, reusing", self._display)
 
         # Chrome を起動
         if not await self._start_chrome():
@@ -74,6 +77,8 @@ class BrowserManager:
             logger.warning("Chrome not found — install with: sudo apt install google-chrome-stable")
             return False
 
+        chrome_env = dict(os.environ)
+        chrome_env["DISPLAY"] = self._display
         self._chrome_proc = await asyncio.create_subprocess_exec(
             chrome_bin,
             f"--remote-debugging-port={self.cdp_port}",
@@ -82,6 +87,7 @@ class BrowserManager:
             "--disable-background-timer-throttling",
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
+            env=chrome_env,
         )
         logger.info("Chrome started with CDP port %d (pid=%d)", self.cdp_port, self._chrome_proc.pid)
 

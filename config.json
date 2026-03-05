@@ -8,6 +8,9 @@
     "browser_enabled": false,
     "browser_cdp_port": 9222,
     "browser_novnc_port": 6080,
+    "browser_vnc_port": 5900,
+    "browser_vnc_display": ":99",
+    "heartbeat_thinking": false,
     "allowed_user_ids": [
       "YOUR_DISCORD_USER_ID"
     ],
@@ -24,6 +27,8 @@
     "browser_enabled": false,
     "browser_cdp_port": 9221,
     "browser_novnc_port": 6081,
+    "browser_vnc_port": 5901,
+    "browser_vnc_display": ":100",
     "allowed_user_ids": [
       "YOUR_SLACK_USER_ID"
     ],
@@ -38,8 +43,10 @@
     "thinking": false,
     "skip_permissions": true,
     "browser_enabled": false,
-    "browser_cdp_port": 9222,
+    "browser_cdp_port": 9220,
     "browser_novnc_port": 6082,
+    "browser_vnc_port": 5902,
+    "browser_vnc_display": ":101",
     "allowed_user_ids": [
       "YOUR_NOTION_USER_ID"
     ],

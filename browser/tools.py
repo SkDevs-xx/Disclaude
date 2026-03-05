@@ -1,8 +1,8 @@
 """MCP ツール定義 — Claude に公開するブラウザ操作ツール。"""
 
 import asyncio
-import base64
 import json
+import os
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -11,19 +11,20 @@ from .cdp import CDPClient
 
 
 def _load_port() -> int:
-    """config.json から CDP ポートを読み取る。"""
+    """DISCLAUDE_PLATFORM 環境変数を参照してプラットフォーム別の CDP ポートを読み取る。"""
+    platform = os.environ.get("DISCLAUDE_PLATFORM", "discord")
     config_path = Path(__file__).resolve().parent.parent / "config.json"
     try:
         with open(config_path) as f:
             cfg = json.load(f)
-        return int(cfg.get("browser_cdp_port", 9222))
+        return int(cfg.get(platform, {}).get("browser_cdp_port", 9222))
     except Exception:
         return 9222
 
 
 # 共有インスタンス
 cdp = CDPClient()
-_port = _load_port()
+_connected_port: int | None = None
 
 
 def register_tools(mcp: FastMCP) -> None:
@@ -31,8 +32,13 @@ def register_tools(mcp: FastMCP) -> None:
 
     async def _ensure_connected(allow_dialog: bool = False) -> str | None:
         """接続を確認する。保留ダイアログがあればその情報を返す（allow_dialog=True時は無視）。"""
-        if not cdp.is_connected:
-            await cdp.connect(port=_port)
+        global _connected_port
+        port = _load_port()
+        if not cdp.is_connected or _connected_port != port:
+            if cdp.is_connected:
+                await cdp.disconnect()
+            await cdp.connect(port=port)
+            _connected_port = port
         if not allow_dialog:
             return _check_pending_dialog()
         return None
@@ -167,11 +173,12 @@ def register_tools(mcp: FastMCP) -> None:
     @mcp.tool(name="browser_status", description="ブラウザ接続の状態を確認する")
     async def browser_status() -> str:
         try:
-            targets = await cdp.get_targets(port=_port)
+            port = _load_port()
+            targets = await cdp.get_targets(port=port)
             connected = cdp.is_connected
             status = {
                 "connected": connected,
-                "cdp_port": _port,
+                "cdp_port": port,
                 "tabs": [{"title": t.get("title", ""), "url": t.get("url", "")} for t in targets],
             }
             if cdp.pending_dialog:
@@ -267,11 +274,12 @@ def register_tools(mcp: FastMCP) -> None:
 
     @mcp.tool(name="browser_tabs", description="タブ一覧を取得する。tab_index を指定するとそのタブに切り替える")
     async def browser_tabs(tab_index: int = -1) -> str:
-        targets = await cdp.get_targets(port=_port)
+        port = _load_port()
+        targets = await cdp.get_targets(port=port)
         tabs = [{"index": i, "title": t.get("title", ""), "url": t.get("url", "")} for i, t in enumerate(targets)]
 
         if tab_index >= 0:
-            await cdp.switch_tab(port=_port, tab_index=tab_index)
+            await cdp.switch_tab(port=port, tab_index=tab_index)
             return json.dumps({"switched_to": tab_index, "tabs": tabs}, ensure_ascii=False, indent=2)
 
         return json.dumps({"tabs": tabs}, ensure_ascii=False, indent=2)
@@ -288,7 +296,7 @@ def register_tools(mcp: FastMCP) -> None:
     async def browser_close_tab() -> str:
         if block := await _ensure_connected():
             return block
-        targets = await cdp.get_targets(port=_port)
+        targets = await cdp.get_targets(port=_load_port())
         if not targets:
             return json.dumps({"error": "no tabs found"})
         target_id = targets[0].get("id", "")
