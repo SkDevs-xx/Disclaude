@@ -19,6 +19,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 from core.config import WORKFLOW_DIR, load_config, save_config
 from core.claude import run_claude
+from core.discord_utils import get_guild_channels
 from core.embeds import make_error_embed, make_info_embed, split_message
 
 JST = ZoneInfo("Asia/Tokyo")
@@ -209,23 +210,13 @@ class HeartbeatSettingsModal(discord.ui.Modal, title="Heartbeat 詳細設定"):
         state = _parse_heartbeat_state(text)
         cfg = load_config()
         guild = interaction.guild
-        channels = _get_guild_channels(guild) if guild else []
+        channels = get_guild_channels(guild) if guild else []
         await interaction.response.edit_message(
             embed=_build_status_embed(state, cfg),
             view=HeartbeatView(self.bot, channels, cfg),
         )
 
 
-def _get_guild_channels(guild: discord.Guild) -> list[tuple[int, str]]:
-    channels: list[tuple[int, str]] = []
-    for ch in guild.channels:
-        if isinstance(ch, discord.TextChannel):
-            channels.append((ch.id, ch.name))
-    for th in guild.threads:
-        if isinstance(th.parent, discord.TextChannel):
-            channels.append((th.id, f"{th.parent.name} > {th.name}"))
-    channels.sort(key=lambda x: x[1])
-    return channels
 
 
 # ─────────────────────────────────────────────
@@ -610,7 +601,7 @@ class HeartbeatCog(commands.Cog):
         text = HEARTBEAT_FILE.read_text(encoding="utf-8")
         state = _parse_heartbeat_state(text)
         cfg = load_config()
-        channels = _get_guild_channels(interaction.guild) if interaction.guild else []
+        channels = get_guild_channels(interaction.guild) if interaction.guild else []
         await interaction.response.send_message(
             embed=_build_status_embed(state, cfg),
             view=HeartbeatView(self.bot, channels, cfg),

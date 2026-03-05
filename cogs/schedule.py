@@ -15,6 +15,7 @@ from apscheduler.triggers.cron import CronTrigger
 from core.config import (
     get_channel_name, load_schedules, save_schedules,
 )
+from core.discord_utils import get_guild_channels
 from core.embeds import make_error_embed, make_info_embed
 
 logger = logging.getLogger("discord_bot")
@@ -450,7 +451,7 @@ class ScheduleActionView(discord.ui.View):
         if not interaction.guild:
             await interaction.response.send_message(embed=make_error_embed("サーバー内でのみ使用できます。"), ephemeral=True)
             return
-        channels = _get_guild_channels(interaction.guild)
+        channels = get_guild_channels(interaction.guild)
         view = ScheduleEditSetupView(self.bot, target, channels)
         await interaction.response.send_message(embed=view.make_embed(), view=view, ephemeral=True)
 
@@ -479,16 +480,6 @@ class ScheduleActionView(discord.ui.View):
 # ─────────────────────────────────────────────
 # ヘルパー関数
 # ─────────────────────────────────────────────
-def _get_guild_channels(guild: discord.Guild) -> list[tuple[int, str]]:
-    channels: list[tuple[int, str]] = []
-    for ch in guild.channels:
-        if isinstance(ch, discord.TextChannel):
-            channels.append((ch.id, ch.name))
-    for th in guild.threads:
-        if isinstance(th.parent, discord.TextChannel):
-            channels.append((th.id, f"{th.parent.name} > {th.name}"))
-    channels.sort(key=lambda x: x[1])
-    return channels
 
 
 async def _commit_schedule(bot: commands.Bot, interaction: discord.Interaction, name: str, cron: str, prompt: str, channel_id: int, model: str = "sonnet", thinking: bool = False):
@@ -562,7 +553,7 @@ class ScheduleCog(commands.Cog):
         if not interaction.guild:
             await interaction.response.send_message(embed=make_error_embed("サーバー内でのみ使用できます。"), ephemeral=True)
             return
-        channels = _get_guild_channels(interaction.guild)
+        channels = get_guild_channels(interaction.guild)
         if not channels:
             await interaction.response.send_message(embed=make_error_embed("チャンネルが見つかりません。"), ephemeral=True)
             return
