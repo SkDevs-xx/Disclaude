@@ -166,6 +166,7 @@ async def _run_heartbeat_core(bot: "SlackBot"):
     registry_instr = bot.skill_registry.build_instructions(ctx.name, disabled=ctx.disabled_skills)
     skill_instr = (
         f"[platform: {ctx.name}]\n"
+        + (f"\n{ctx.format_hint}\n" if ctx.format_hint else "")
         + (f"\n{registry_instr}" if registry_instr else "")
     )
 

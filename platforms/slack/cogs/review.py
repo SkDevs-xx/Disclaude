@@ -89,12 +89,22 @@ def register(bot: "SlackBot"):
             save_channel_session(channel_id, session_id)
 
         model, thinking = get_model_config()
+        registry_instr = bot.skill_registry.build_instructions(
+            bot.platform_context.name,
+            disabled=bot.platform_context.disabled_skills,
+        )
+        skill_instr = (
+            f"[platform: {bot.platform_context.name}]\n"
+            + (f"\n{bot.platform_context.format_hint}\n" if bot.platform_context.format_hint else "")
+            + (f"\n{registry_instr}" if registry_instr else "")
+        )
         response_text, timed_out = await run_claude(
             prompt,
             model=model,
             thinking=thinking,
             session_id=session_id,
             is_new_session=is_new,
+            skill_instructions=skill_instr,
         )
 
         if timed_out:
