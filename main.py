@@ -1,7 +1,7 @@
 """
 マルチプラットフォーム対応エントリポイント
 Usage:
-    python main.py --platform discord
+    python main.py
     python main.py --init-workspace slack --from discord
 """
 
@@ -10,6 +10,7 @@ import logging
 import os
 import shutil
 import sys
+import threading
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
@@ -70,6 +71,32 @@ def _run_discord():
     bot.run(token, log_handler=None)
 
 
+def _run_slack():
+    """Slack Bot を起動する。"""
+    import asyncio
+    load_dotenv(BASE_DIR / ".env")
+    bot_token = os.getenv("SLACK_BOT_TOKEN")
+    app_token = os.getenv("SLACK_APP_TOKEN")
+    if not bot_token:
+        logger.error(".env に SLACK_BOT_TOKEN が設定されていません。")
+        sys.exit(1)
+    if not app_token:
+        logger.error(".env に SLACK_APP_TOKEN が設定されていません。")
+        sys.exit(1)
+
+    workspace_dir = BASE_DIR / "platforms" / "slack" / "workspace"
+    init_workspace(workspace_dir)
+
+    # workspace ディレクトリを作成
+    from core.config import WORKFLOW_DIR, MEMORY_DIR, ATTACHMENTS_DIR, TMP_DIR
+    for d in [WORKFLOW_DIR, MEMORY_DIR, ATTACHMENTS_DIR, TMP_DIR]:
+        d.mkdir(parents=True, exist_ok=True)
+
+    from platforms.slack.bot import SlackBot
+    bot = SlackBot(bot_token, app_token)
+    asyncio.run(bot.start())
+
+
 def main():
     parser = argparse.ArgumentParser(description="Multi-platform Claude Bot")
     parser.add_argument("--init-workspace", metavar="PLATFORM",
@@ -89,13 +116,24 @@ def main():
     from core.config import load_config
     cfg = load_config()
 
-    if cfg.get("discord", {}).get("enabled", False):
-        _run_discord()
-    else:
+    slack_enabled = cfg.get("slack", {}).get("enabled", False)
+    discord_enabled = cfg.get("discord", {}).get("enabled", False)
+
+    if not slack_enabled and not discord_enabled:
         logger.error(
-            "有効なプラットフォームがありません。config.json の discord.enabled を true に設定してください。"
+            "有効なプラットフォームがありません。config.json の discord.enabled または slack.enabled を true に設定してください。"
         )
         sys.exit(1)
+
+    if slack_enabled and discord_enabled:
+        # 両方有効な場合はスレッドで並列起動
+        t = threading.Thread(target=_run_discord, daemon=True)
+        t.start()
+        _run_slack()  # メインスレッドで Slack を起動
+    elif slack_enabled:
+        _run_slack()
+    else:
+        _run_discord()
 
 
 if __name__ == "__main__":

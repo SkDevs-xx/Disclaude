@@ -41,8 +41,9 @@ async def run_claude(
     if timeout is None:
         timeout = TIMEOUT_PLANNING if thinking else TIMEOUT_FAST
 
-    full_prompt = f"{skill_instructions}\n\n{prompt}" if skill_instructions else prompt
-    cmd = [CLAUDE_BIN, "-p", full_prompt, "--output-format", "text"]
+    cmd = [CLAUDE_BIN, "-p", prompt, "--output-format", "text"]
+    if skill_instructions:
+        cmd += ["--system-prompt", skill_instructions]
     if get_skip_permissions():
         cmd.append("--dangerously-skip-permissions")
     cmd += ["--model", model]
@@ -54,7 +55,8 @@ async def run_claude(
         else:
             cmd += ["--resume", session_id]
 
-    logger.info("claude: model=%s thinking=%s prompt_len=%d timeout=%ds", model, thinking, len(full_prompt), timeout)
+    total_len = len(prompt) + (len(skill_instructions) if skill_instructions else 0)
+    logger.info("claude: model=%s thinking=%s prompt_len=%d timeout=%ds", model, thinking, total_len, timeout)
 
     proc: asyncio.subprocess.Process | None = None
     try:

@@ -21,7 +21,14 @@
     "thinking": false,
     "skip_permissions": true,
     "browser_enabled": false,
-    "browser_cdp_port": 9221
+    "browser_cdp_port": 9221,
+    "allowed_user_ids": [
+      "YOUR_SLACK_USER_ID"
+    ],
+    "heartbeat_enabled": false,
+    "heartbeat_channel_id": "YOUR_HEARTBEAT_CHANNEL_ID",
+    "heartbeat_interval_minutes": 1,
+    "no_mention_channels": []
   },
   "notion": {
     "enabled": false,
@@ -29,6 +36,13 @@
     "thinking": false,
     "skip_permissions": true,
     "browser_enabled": false,
-    "browser_cdp_port": 9220
+    "browser_cdp_port": 9220,
+    "allowed_user_ids": [
+      "YOUR_NOTION_USER_ID"
+    ],
+    "heartbeat_enabled": false,
+    "heartbeat_channel_id": "YOUR_HEARTBEAT_CHANNEL_ID",
+    "heartbeat_interval_minutes": 1,
+    "no_mention_channels": []
   }
 }

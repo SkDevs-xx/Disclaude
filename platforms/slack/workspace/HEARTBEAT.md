@@ -4,8 +4,8 @@
 報告事項がなければ `HEARTBEAT_OK` だけを返すこと。
 
 ## State
-last_updated: 2026-03-04
-wrapup_done: false
+last_updated: 2026-03-05
+wrapup_done: true
 wrapup_time: "05:00"
 last_wrapup_compressed: 2026-03-01
 last_weekly_compressed: 2026-03-01
