@@ -62,7 +62,7 @@ class SummarizeCog(commands.Cog):
         )
 
         async with self.bot.get_channel_lock(channel_id):
-            result, timed_out = await run_claude(meta_prompt, "fast")
+            result, timed_out = await run_claude(meta_prompt)
 
         if timed_out:
             return {"use_all": True, "keywords": [], "date_from": None, "date_to": None}
@@ -236,7 +236,7 @@ class SummarizeCog(commands.Cog):
             )
 
             async with self.bot.get_channel_lock(interaction.channel_id):
-                summary, timed_out = await run_claude(full_prompt, "fast")
+                summary, timed_out = await run_claude(full_prompt)
 
             if timed_out:
                 await interaction.followup.send(
