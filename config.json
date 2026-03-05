@@ -7,6 +7,7 @@
     "skip_permissions": true,
     "browser_enabled": false,
     "browser_cdp_port": 9222,
+    "browser_novnc_port": 6080,
     "allowed_user_ids": [
       "YOUR_DISCORD_USER_ID"
     ],
@@ -22,6 +23,7 @@
     "skip_permissions": true,
     "browser_enabled": false,
     "browser_cdp_port": 9221,
+    "browser_novnc_port": 6081,
     "allowed_user_ids": [
       "YOUR_SLACK_USER_ID"
     ],
@@ -36,7 +38,8 @@
     "thinking": false,
     "skip_permissions": true,
     "browser_enabled": false,
-    "browser_cdp_port": 9220,
+    "browser_cdp_port": 9222,
+    "browser_novnc_port": 6082,
     "allowed_user_ids": [
       "YOUR_NOTION_USER_ID"
     ],
