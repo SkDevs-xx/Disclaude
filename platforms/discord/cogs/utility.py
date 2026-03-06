@@ -1,6 +1,9 @@
 """
-UtilityCog: /model, /status, /cancel, /mention
+UtilityCog: /model, /status, /cancel, /mention, /skills-list
 """
+
+import re
+import uuid
 
 import discord
 from discord import app_commands
@@ -10,8 +13,12 @@ from core.config import (
     load_platform_config, save_platform_config,
     get_model_config,
     get_no_mention_channels, set_no_mention,
+    get_channel_session, save_channel_session,
+    BASE_DIR,
 )
-from platforms.discord.embeds import make_info_embed
+from core.engine import run_engine
+from core.message import split_message
+from platforms.discord.embeds import make_info_embed, make_error_embed
 
 
 MODEL_CHOICES = [
@@ -119,6 +126,78 @@ class MentionView(discord.ui.View):
         await interaction.response.edit_message(embed=self.make_embed(False), view=self)
 
 
+class SkillsListView(discord.ui.View):
+    """user-invocable スキルをボタン一覧で表示し、選択時に発動するビュー。"""
+
+    def __init__(self, bot, skills):
+        super().__init__(timeout=300)
+        self.bot = bot
+        for skill in skills[:25]:  # Discord 上限: 5行 × 5ボタン = 25
+            btn = discord.ui.Button(
+                label=skill.name,
+                style=discord.ButtonStyle.primary,
+                custom_id=f"skill_invoke__{skill.name}",
+            )
+            btn.callback = self._make_callback(skill.name)
+            self.add_item(btn)
+
+    def _make_callback(self, skill_name: str):
+        async def callback(interaction: discord.Interaction):
+            await interaction.response.defer(ephemeral=True)
+            channel_id = interaction.channel_id
+            channel = interaction.channel or self.bot.get_channel(channel_id)
+
+            try:
+                lock = self.bot.get_channel_lock(channel_id)
+                async with lock:
+                    session_id = get_channel_session(channel_id)
+                    is_new = session_id is None
+                    if is_new:
+                        session_id = str(uuid.uuid4())
+                        save_channel_session(channel_id, session_id)
+
+                    model, thinking = get_model_config()
+                    registry_instr = self.bot.skill_registry.build_instructions(
+                        self.bot.platform_context.name,
+                        disabled=self.bot.platform_context.disabled_skills,
+                    )
+                    skill_instr = (
+                        f"[platform: {self.bot.platform_context.name}]\n"
+                        + (f"\n{registry_instr}" if registry_instr else "")
+                    )
+                    prompt = f"[{skill_name}スキルを呼び出してください。スキルの指示に従って会話を開始してください。]"
+
+                    if channel:
+                        await channel.typing()
+                    response, timed_out = await run_engine(
+                        prompt,
+                        model=model,
+                        thinking=thinking,
+                        session_id=session_id,
+                        is_new_session=is_new,
+                        on_process=lambda p: self.bot.running_processes.__setitem__(channel_id, p),
+                        skill_instructions=skill_instr,
+                    )
+
+                if timed_out:
+                    if channel:
+                        await channel.send(embed=make_error_embed(
+                            "タイムアウトしました。`/cancel` で再試行するか、少し待ってから再送してください。"
+                        ))
+                    return
+
+                if response and channel:
+                    display_response = re.sub(r'\n{2,}', '\n', response)
+                    chunks = split_message(display_response, max_len=2000)
+                    await channel.send(chunks[0])
+                    for chunk in chunks[1:]:
+                        await channel.send(chunk)
+            except Exception as e:
+                if channel:
+                    await channel.send(embed=make_error_embed(f"エラーが発生しました: {e}"))
+        return callback
+
+
 class UtilityCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -172,6 +251,25 @@ class UtilityCog(commands.Cog):
         await interaction.response.send_message(
             embed=MentionView.make_embed(current), view=view, ephemeral=True
         )
+
+    @app_commands.command(name="skills-list", description="利用可能なスキル一覧を表示し、選択で発動する")
+    async def skills_list_command(self, interaction: discord.Interaction):
+        self.bot.skill_registry.reload(BASE_DIR / "skills")
+        skills = [s for s in self.bot.skill_registry.all_skills() if s.user_invocable]
+
+        if not skills:
+            await interaction.response.send_message(
+                embed=make_info_embed("スキル一覧", "利用可能なスキルがありません。"), ephemeral=True
+            )
+            return
+
+        embed = discord.Embed(title="利用可能なスキル", color=0x5865F2)
+        for skill in skills[:25]:
+            desc = skill.description[:100] + "…" if len(skill.description) > 100 else skill.description
+            embed.add_field(name=skill.name, value=desc, inline=False)
+
+        view = SkillsListView(self.bot, skills)
+        await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
 async def setup(bot: commands.Bot):

@@ -9,6 +9,8 @@ Slack スラッシュコマンドハンドラ
 from __future__ import annotations
 
 import logging
+import re
+import uuid
 from typing import TYPE_CHECKING
 
 from core.config import (
@@ -17,7 +19,11 @@ from core.config import (
     get_model_config,
     get_no_mention_channels,
     set_no_mention,
+    get_channel_session,
+    save_channel_session,
+    BASE_DIR,
 )
+from core.engine import run_engine
 
 
 def _status_blocks(model: str, thinking: bool, running: bool, reply_in_thread: bool) -> list[dict]:
@@ -244,3 +250,102 @@ def register(bot: "SlackBot"):
         channel_id = body["actions"][0]["value"]
         set_no_mention(channel_id, False)
         await respond(text=":white_check_mark: このチャンネルはメンション必要になりました。", replace_original=True)
+
+    # ── /skills-list ─────────────────────────────────────
+    @app.command("/skills-list")
+    async def cmd_skills_list(ack, command, client):
+        await ack()
+        bot.skill_registry.reload(BASE_DIR / "skills")
+        skills = [s for s in bot.skill_registry.all_skills() if s.user_invocable]
+        channel_id = command["channel_id"]
+        user_id = command["user_id"]
+
+        if not skills:
+            await client.chat_postEphemeral(
+                channel=channel_id, user=user_id, text="利用可能なスキルがありません。"
+            )
+            return
+
+        blocks: list[dict] = [
+            {"type": "section", "text": {"type": "mrkdwn", "text": "*利用可能なスキル*"}},
+            {"type": "divider"},
+        ]
+        for skill in skills:
+            desc = skill.description[:80] + "…" if len(skill.description) > 80 else skill.description
+            blocks.append({
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": f"*{skill.name}*\n{desc}"},
+                "accessory": {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "発動"},
+                    "action_id": f"skill_invoke__{skill.name}",
+                    "value": f"{channel_id}|{skill.name}",
+                },
+            })
+        await client.chat_postEphemeral(
+            channel=channel_id, user=user_id, blocks=blocks, text="スキル一覧"
+        )
+
+    @app.action(re.compile(r"skill_invoke__.*"))
+    async def action_skill_invoke(ack, body, client, action):
+        await ack()
+        value = action.get("value", "")
+        parts = value.split("|", 1)
+        if len(parts) != 2:
+            return
+        channel_id, skill_name = parts
+
+        platform_cfg = load_platform_config()
+        reply_in_thread = platform_cfg.get("reply_in_thread", True)
+
+        try:
+            await client.reactions_add(channel=channel_id, name="thinking_face", timestamp=body.get("message", {}).get("ts", ""))
+        except Exception:
+            pass
+
+        try:
+            lock = bot.get_channel_lock(channel_id)
+            async with lock:
+                session_id = get_channel_session(channel_id)
+                is_new = session_id is None
+                if is_new:
+                    session_id = str(uuid.uuid4())
+                    save_channel_session(channel_id, session_id)
+
+                model, thinking = get_model_config()
+                registry_instr = bot.skill_registry.build_instructions(
+                    bot.platform_context.name,
+                    disabled=bot.platform_context.disabled_skills,
+                )
+                skill_instr = (
+                    f"[platform: {bot.platform_context.name}]\n"
+                    + (f"\n{bot.platform_context.format_hint}\n" if bot.platform_context.format_hint else "")
+                    + (f"\n{registry_instr}" if registry_instr else "")
+                )
+                prompt = f"[{skill_name}スキルを呼び出してください。スキルの指示に従って会話を開始してください。]"
+                response, timed_out = await run_engine(
+                    prompt,
+                    model=model,
+                    thinking=thinking,
+                    session_id=session_id,
+                    is_new_session=is_new,
+                    on_process=lambda p: bot.running_processes.__setitem__(channel_id, p),
+                    skill_instructions=skill_instr,
+                )
+
+            if timed_out:
+                await client.chat_postMessage(
+                    channel=channel_id,
+                    text=":warning: タイムアウトしました。`/cancel-ai` で再試行するか、少し待ってから再送してください。",
+                )
+                return
+
+            if response:
+                await client.chat_postMessage(channel=channel_id, text=response)
+        finally:
+            try:
+                ts = body.get("message", {}).get("ts", "")
+                if ts:
+                    await client.reactions_remove(channel=channel_id, name="thinking_face", timestamp=ts)
+            except Exception:
+                pass

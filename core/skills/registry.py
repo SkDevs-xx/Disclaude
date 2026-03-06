@@ -24,6 +24,11 @@ class SkillRegistry:
         self._skills[skill.name] = skill
         logger.debug("Skill registered: %s", skill.name)
 
+    def reload(self, skills_dir: Path) -> int:
+        """スキルを再スキャンして登録する（既存の登録をクリアして再構築）。"""
+        self._skills.clear()
+        return self.scan_directory(skills_dir)
+
     def scan_directory(self, skills_dir: Path) -> int:
         """ディレクトリ配下の SKILL.md を再帰スキャンして登録する。
 

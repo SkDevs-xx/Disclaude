@@ -73,6 +73,11 @@
         "command": "/summarize-ai",
         "description": "Summarize channel messages with AI",
         "should_escape": false
+      },
+      {
+        "command": "/skills-list",
+        "description": "Show available skills and invoke one",
+        "should_escape": false
       }
     ]
   },
@@ -219,6 +224,7 @@ INFO  Bolt app is running in Socket Mode!
 | `/schedule-ai list` | 登録済みの定期タスクを一覧表示する |
 | `/summarize-ai` | チャンネルの会話を AI で要約する |
 | `/summarize-ai 先週の議論` | 指定した内容でフィルタリングして要約する |
+| `/skills-list` | 利用可能なスキル一覧を表示し、ボタンで選択して発動する（新規作成スキルも再起動不要で認識） |
 
 ---
 
