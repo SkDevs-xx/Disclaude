@@ -1,5 +1,9 @@
 # Clive
+<div align="center">
 
+[![Setup](https://img.shields.io/badge/Setup-⚙️-4A90D9?style=flat-square)](docs/setup.md) [![Commands](https://img.shields.io/badge/Commands-⌨️-6A5ACD?style=flat-square)](docs/commands.md) [![Config](https://img.shields.io/badge/Config-🔧-2E8B57?style=flat-square)](docs/config.md) [![Browser](https://img.shields.io/badge/Browser-🌐-E67E22?style=flat-square)](docs/browser.md) [![Skills](https://img.shields.io/badge/Skills-🧠-9B59B6?style=flat-square)](docs/skills.md) [![Security](https://img.shields.io/badge/Security-🔒-E74C3C?style=flat-square)](docs/security.md) [![Slack Setup](https://img.shields.io/badge/Slack_Setup-💬-1ABC9C?style=flat-square)](docs/slack-bot-setup.md) [![Uninstall](https://img.shields.io/badge/Uninstall-🗑️-95A5A6?style=flat-square)](docs/uninstall.md)
+
+</div>
 チャットプラットフォームに常駐する自律型 AI エージェント。
 
 AI CLI エンジン（Claude Code CLI / Codex CLI 等）をサブプロセスとして直接実行するアーキテクチャにより、API キーの管理やトークン課金が不要。各 CLI の定額サブスクリプションだけで動作する。ファイルベースの永続記憶（SOUL.md / USER.md / EMOTION.md）で人格・記憶・感情を持ち、単なるタスク実行ツールではなく「住み着く AI」として振る舞う。
