@@ -22,7 +22,10 @@ def _load_port() -> int:
         return 9222
 
 
-# 共有インスタンス
+# MCP サーバーはプラットフォームごとに独立したプロセスとして起動されるため、
+# CDPClient のシングルトンはプロセス間で共有されない。
+# 各プロセスは DISCLAUDE_PLATFORM 環境変数で自身のプラットフォームを識別し、
+# 対応する CDP ポートに接続する。
 cdp = CDPClient()
 _connected_port: int | None = None
 

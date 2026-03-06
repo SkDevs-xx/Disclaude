@@ -19,7 +19,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 import core.config as _cfg
 from core.config import load_platform_config, save_platform_config, get_model_config
-from core.claude import run_claude
+from core.engine import run_engine
 from core.message import split_message
 from core.memory import (
     parse_heartbeat_state,
@@ -173,7 +173,7 @@ async def _run_heartbeat_core(bot: "SlackBot"):
     interval = cfg.get("heartbeat_interval_minutes", 30)
     model, _ = get_model_config()
     hb_thinking = cfg.get("heartbeat_thinking", False)
-    response, timed_out = await run_claude(
+    response, timed_out = await run_engine(
         prompt, timeout=interval * 60, skill_instructions=skill_instr, model=model, thinking=hb_thinking,
     )
 
@@ -276,7 +276,7 @@ async def _compress_daily_to_weekly(guild_dir, today: date):
         "重要なポイント・決定事項・進捗を残し、冗長な詳細は省いてください。\n\n"
         + combined
     )
-    summary, timed_out = await run_claude(prompt)
+    summary, timed_out = await run_engine(prompt)
     if timed_out or not summary:
         return
     week_file.write_text(f"# 週次サマリー ({iso_cal.year}-W{iso_cal.week:02d})\n\n{summary}\n", encoding="utf-8")
@@ -306,7 +306,7 @@ async def _compress_weekly_to_monthly(guild_dir, today: date):
         "重要なトレンド・決定事項・マイルストーンを残し、詳細は省いてください。\n\n"
         + combined
     )
-    summary, timed_out = await run_claude(prompt)
+    summary, timed_out = await run_engine(prompt)
     if timed_out or not summary:
         return
     month_file.write_text(f"# 月次サマリー ({today.year}-{today.month:02d})\n\n{summary}\n", encoding="utf-8")
@@ -322,6 +322,7 @@ async def _notify(bot: "SlackBot", channel_id_str: str | None, message: str, *, 
 
     now = datetime.now(JST)
 
+    msg_hash: str | None = None
     if not skip_dedup:
         cutoff = timedelta(hours=SUPPRESS_HOURS)
         expired = [k for k, v in _sent_warnings.items() if (now - v) >= cutoff]
@@ -335,7 +336,7 @@ async def _notify(bot: "SlackBot", channel_id_str: str | None, message: str, *, 
                 logger.info("Heartbeat: suppressed duplicate warning")
                 return
 
-    if not skip_dedup:
+    if msg_hash is not None:
         _sent_warnings[msg_hash] = now
 
     client = bot.app.client

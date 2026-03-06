@@ -25,7 +25,7 @@ from core.config import (
     get_channel_session, save_channel_session,
     get_no_mention_channels, get_model_config,
 )
-from core.claude import run_claude
+from core.engine import run_engine
 from core.message import split_message
 from core.attachments import process_attachment
 from core.skills import SkillRegistry
@@ -150,7 +150,7 @@ class ClaudeBot(commands.Bot):
                 sched_model = s.get("model", "sonnet")
                 sched_thinking = s.get("thinking", s.get("mode") == "planning")
                 async with self.get_channel_lock(channel_id):
-                    response, timed_out = await run_claude(
+                    response, timed_out = await run_engine(
                         s["prompt"] + "\n\n" + DISCORD_FORMAT_HINT,
                         model=sched_model, thinking=sched_thinking,
                     )
@@ -278,7 +278,7 @@ class ClaudeBot(commands.Bot):
                         f"[platform: {self.platform_context.name}]\n"
                         + (f"\n{registry_instr}" if registry_instr else "")
                     )
-                    response, timed_out = await run_claude(
+                    response, timed_out = await run_engine(
                         full_prompt, model=model, thinking=thinking,
                         session_id=session_id,
                         is_new_session=is_new,

@@ -21,7 +21,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from core.claude import run_claude
+from core.engine import run_engine
 import core.config as _cfg
 from core.message import split_message
 from platforms.discord.embeds import make_error_embed, make_info_embed
@@ -63,7 +63,7 @@ class SummarizeCog(commands.Cog):
         )
 
         async with self.bot.get_channel_lock(channel_id):
-            result, timed_out = await run_claude(meta_prompt)
+            result, timed_out = await run_engine(meta_prompt)
 
         if timed_out:
             return {"use_all": True, "keywords": [], "date_from": None, "date_to": None}
@@ -160,9 +160,17 @@ class SummarizeCog(commands.Cog):
                 return
 
             # ─── tmp ファイルから先頭・末尾サンプルを生成 ──────────────────────
-            raw = tmp_path.read_text(encoding="utf-8")
-            head = raw[:SAMPLE_HEAD_CHARS]
-            tail = raw[-SAMPLE_TAIL_CHARS:] if len(raw) > SAMPLE_HEAD_CHARS + SAMPLE_TAIL_CHARS else ""
+            with open(tmp_path, "rb") as _f:
+                head_bytes = _f.read(SAMPLE_HEAD_CHARS * 4)
+                _f.seek(0, 2)
+                _total = _f.tell()
+                if _total > (SAMPLE_HEAD_CHARS + SAMPLE_TAIL_CHARS) * 4:
+                    _f.seek(max(0, _total - SAMPLE_TAIL_CHARS * 4))
+                    tail_bytes = _f.read()
+                else:
+                    tail_bytes = b""
+            head = head_bytes.decode("utf-8", errors="replace")[:SAMPLE_HEAD_CHARS]
+            tail = tail_bytes.decode("utf-8", errors="replace")[-SAMPLE_TAIL_CHARS:] if tail_bytes else ""
             sample = head + ("\n...\n" + tail if tail else "")
 
             # ─── Stage 1: 検索条件を Claude で抽出 ───────────────────────────────
@@ -237,7 +245,7 @@ class SummarizeCog(commands.Cog):
             )
 
             async with self.bot.get_channel_lock(interaction.channel_id):
-                summary, timed_out = await run_claude(full_prompt)
+                summary, timed_out = await run_engine(full_prompt)
 
             if timed_out:
                 await interaction.followup.send(

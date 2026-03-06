@@ -13,7 +13,10 @@ from zoneinfo import ZoneInfo
 import core.config as _cfg
 
 JST = ZoneInfo("Asia/Tokyo")
-logger = logging.getLogger("discord_bot")
+
+
+def _logger() -> logging.Logger:
+    return _cfg._logger()
 
 
 def get_wrapup_dir() -> Path:
@@ -58,7 +61,7 @@ async def run_wrapup(
     collect_messages: プラットフォーム固有のメッセージ収集関数
     format_hint: 出力形式の指示（プラットフォーム固有）
     """
-    from core.claude import run_claude
+    from core.engine import run_engine
 
     # ── wrapup_time のパース ──
     wt_h, wt_m = (int(x) for x in wrapup_time.split(":"))
@@ -100,7 +103,7 @@ async def run_wrapup(
     if d_from != d_to:
         date_label += f" 〜 {d_to.strftime('%Y-%m-%d')}"
 
-    logger.info("wrapup: guild=%d period=%s msgs=%d chars=%d truncated=%s",
+    _logger().info("wrapup: guild=%d period=%s msgs=%d chars=%d truncated=%s",
                 guild_id, date_label, result.total_msgs, result.total_chars, result.truncated)
 
     # ── Claude に要約を依頼 ──
@@ -112,7 +115,7 @@ async def run_wrapup(
         prompt += "\n" + format_hint + "\n"
     prompt += "\n" + history_text
 
-    summary, timed_out = await run_claude(prompt)
+    summary, timed_out = await run_engine(prompt)
 
     if timed_out or not summary or summary.startswith("エラーが発生しました"):
         return None

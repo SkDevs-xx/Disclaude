@@ -19,7 +19,7 @@ from apscheduler.triggers.cron import CronTrigger
 
 import core.config as _cfg
 from core.config import load_platform_config, save_platform_config, get_model_config
-from core.claude import run_claude
+from core.engine import run_engine
 from platforms.discord.utils import get_guild_channels
 from platforms.discord.embeds import make_error_embed, make_info_embed
 from core.message import split_message
@@ -352,7 +352,7 @@ class HeartbeatCog(commands.Cog):
         interval = cfg.get("heartbeat_interval_minutes", 30)
         hb_thinking = cfg.get("heartbeat_thinking", False)
         model, _ = get_model_config()
-        response, timed_out = await run_claude(
+        response, timed_out = await run_engine(
             prompt, timeout=interval * 60, skill_instructions=skill_instr,
             model=model, thinking=hb_thinking,
         )
@@ -491,7 +491,7 @@ class HeartbeatCog(commands.Cog):
             + combined
         )
 
-        summary, timed_out = await run_claude(prompt)
+        summary, timed_out = await run_engine(prompt)
         if timed_out or not summary:
             logger.warning("Heartbeat: weekly compression timed out")
             return
@@ -532,7 +532,7 @@ class HeartbeatCog(commands.Cog):
             + combined
         )
 
-        summary, timed_out = await run_claude(prompt)
+        summary, timed_out = await run_engine(prompt)
         if timed_out or not summary:
             logger.warning("Heartbeat: monthly compression timed out")
             return
@@ -554,6 +554,7 @@ class HeartbeatCog(commands.Cog):
 
         now = datetime.now(JST)
 
+        msg_hash: str | None = None
         if not skip_dedup:
             # 期限切れエントリを削除
             cutoff = timedelta(hours=SUPPRESS_HOURS)
@@ -573,7 +574,7 @@ class HeartbeatCog(commands.Cog):
             logger.warning("Heartbeat: notification channel not found: %s", channel_id_str)
             return
 
-        if not skip_dedup:
+        if msg_hash is not None:
             _sent_warnings[msg_hash] = now
         for chunk in split_message(message, max_len=2000):
             await channel.send(content=chunk)

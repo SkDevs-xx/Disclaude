@@ -16,7 +16,7 @@ from core.config import (
     get_channel_session,
     save_channel_session,
 )
-from core.claude import run_claude
+from core.engine import run_engine
 from platforms.discord.embeds import make_info_embed, make_error_embed
 from core.message import split_message
 from core.memory import parse_pending_reviews, resolve_archive
@@ -93,7 +93,7 @@ class ReviewCog(commands.Cog):
 
         from core.config import get_model_config
         model, thinking = get_model_config()
-        response, timed_out = await run_claude(
+        response, timed_out = await run_engine(
             prompt,
             model=model,
             thinking=thinking,

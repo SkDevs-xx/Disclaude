@@ -72,6 +72,15 @@ CLAUDE_BIN = shutil.which("claude") or str(Path.home() / ".local" / "bin" / "cla
 TIMEOUT_FAST = 180
 TIMEOUT_PLANNING = 300
 
+
+def validate_claude_bin() -> None:
+    """CLAUDE_BIN が実行可能かを確認する。存在しない場合は SystemExit で即終了する。"""
+    if not Path(CLAUDE_BIN).is_file():
+        import sys
+        print(f"[ERROR] Claude CLI が見つかりません: {CLAUDE_BIN}", file=sys.stderr)
+        print("  インストール方法: https://docs.anthropic.com/ja/docs/claude-code/overview", file=sys.stderr)
+        sys.exit(1)
+
 def _logger() -> "logging.Logger":
     name = _tl_get("PLATFORM_NAME")
     return logging.getLogger(f"{name}_bot" if name else "disclaude")
@@ -101,6 +110,9 @@ _config_lock = threading.Lock()
 _config_cache: dict | None = None
 _config_mtime: float = 0.0
 
+_channel_names_lock = threading.Lock()
+_sessions_lock = threading.Lock()
+
 def load_config() -> dict:
     global _config_cache, _config_mtime
     with _config_lock:
@@ -121,6 +133,16 @@ def load_config() -> dict:
 
 def get_skip_permissions() -> bool:
     return load_platform_config().get("skip_permissions", True)
+
+def get_engine_name() -> str:
+    """config.json の "engine" を返す。キーが未設定の場合は起動を中断する。"""
+    import sys
+    cfg = load_config()
+    if "engine" not in cfg:
+        print('[ERROR] config.json に "engine" キーがありません。', file=sys.stderr)
+        print('例: {"engine": "claude"} または {"engine": "codex"}', file=sys.stderr)
+        sys.exit(1)
+    return cfg["engine"]
 
 def save_config(cfg: dict) -> None:
     global _config_cache, _config_mtime
@@ -175,26 +197,28 @@ def load_channel_names() -> dict:
     except (json.JSONDecodeError, ValueError):
         return {}
 
-def save_channel_name(channel_id: int, name: str) -> None:
-    data = load_channel_names()
-    if data.get(str(channel_id)) != name:
-        data[str(channel_id)] = name
-        _atomic_write_json(_tl_get("CHANNEL_NAMES_FILE"), data)
+def save_channel_name(channel_id: int | str, name: str) -> None:
+    with _channel_names_lock:
+        data = load_channel_names()
+        if data.get(str(channel_id)) != name:
+            data[str(channel_id)] = name
+            _atomic_write_json(_tl_get("CHANNEL_NAMES_FILE"), data)
 
-def get_channel_name(channel_id: int) -> str:
+def get_channel_name(channel_id: int | str) -> str:
     data = load_channel_names()
     return data.get(str(channel_id), str(channel_id))
 
-def get_channel_session(channel_id: int) -> str | None:
-    f = _tl_get("SESSIONS_FILE")
-    if not f.exists():
-        return None
-    try:
-        with open(f, encoding="utf-8") as fp:
-            data = json.load(fp)
-        return data.get(str(channel_id))
-    except (json.JSONDecodeError, ValueError):
-        return None
+def get_channel_session(channel_id: int | str) -> str | None:
+    with _sessions_lock:
+        f = _tl_get("SESSIONS_FILE")
+        if not f.exists():
+            return None
+        try:
+            with open(f, encoding="utf-8") as fp:
+                data = json.load(fp)
+            return data.get(str(channel_id))
+        except (json.JSONDecodeError, ValueError):
+            return None
 
 def get_model_config() -> tuple[str, bool]:
     """(model, thinking) を返す。"""
@@ -216,14 +240,15 @@ def set_no_mention(channel_id: int, enabled: bool) -> None:
     cfg["no_mention_channels"] = channels
     save_platform_config(cfg)
 
-def save_channel_session(channel_id: int, session_id: str) -> None:
-    f = _tl_get("SESSIONS_FILE")
-    data: dict = {}
-    if f.exists():
-        try:
-            with open(f, encoding="utf-8") as fp:
-                data = json.load(fp)
-        except (json.JSONDecodeError, ValueError):
-            data = {}
-    data[str(channel_id)] = session_id
-    _atomic_write_json(f, data)
+def save_channel_session(channel_id: int | str, session_id: str) -> None:
+    with _sessions_lock:
+        f = _tl_get("SESSIONS_FILE")
+        data: dict = {}
+        if f.exists():
+            try:
+                with open(f, encoding="utf-8") as fp:
+                    data = json.load(fp)
+            except (json.JSONDecodeError, ValueError):
+                data = {}
+        data[str(channel_id)] = session_id
+        _atomic_write_json(f, data)

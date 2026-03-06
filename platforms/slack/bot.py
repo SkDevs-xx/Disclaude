@@ -28,7 +28,7 @@ from core.config import (
     save_channel_session,
     get_model_config,
 )
-from core.claude import run_claude
+from core.engine import run_engine
 from core.message import split_message
 from core.skills import SkillRegistry
 from platforms.base import PlatformContext
@@ -132,7 +132,7 @@ class SlackBot:
                 sched_thinking = s.get("thinking", s.get("mode") == "planning")
                 lock = self.get_channel_lock(channel_id)
                 async with lock:
-                    response, timed_out = await run_claude(
+                    response, timed_out = await run_engine(
                         s["prompt"] + "\n\n" + SLACK_FORMAT_HINT,
                         model=sched_model,
                         thinking=sched_thinking,

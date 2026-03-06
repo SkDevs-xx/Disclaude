@@ -26,6 +26,7 @@ class BrowserManager:
         self._watcher: asyncio.Task | None = None
         self._display = display
         self._profile_dir = profile_dir or DEFAULT_PROFILE_DIR
+        self._http_session: aiohttp.ClientSession | None = None
 
     async def start(self) -> None:
         """Xtigervnc（仮想ディスプレイ+VNC）、Chrome、noVNC を起動する。"""
@@ -158,11 +159,12 @@ class BrowserManager:
     async def _cdp_is_alive(self) -> bool:
         """CDP ポートが応答するか確認する。"""
         try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"http://127.0.0.1:{self.cdp_port}/json",
-                    timeout=aiohttp.ClientTimeout(total=2),
-                ) as resp:
-                    return resp.status == 200
+            if self._http_session is None or self._http_session.closed:
+                self._http_session = aiohttp.ClientSession()
+            async with self._http_session.get(
+                f"http://127.0.0.1:{self.cdp_port}/json",
+                timeout=aiohttp.ClientTimeout(total=2),
+            ) as resp:
+                return resp.status == 200
         except Exception:
             return False

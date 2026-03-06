@@ -22,7 +22,7 @@ from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
 import core.config as _cfg
-from core.claude import run_claude
+from core.engine import run_engine
 from core.message import split_message
 
 if TYPE_CHECKING:
@@ -84,7 +84,7 @@ async def _get_search_criteria(
 
     lock = bot.get_channel_lock(channel_id)
     async with lock:
-        result, timed_out = await run_claude(meta_prompt)
+        result, timed_out = await run_engine(meta_prompt)
 
     if timed_out:
         return {"use_all": True, "keywords": [], "date_from": None, "date_to": None}
@@ -183,9 +183,17 @@ def register(bot: "SlackBot"):
             )
 
             # ─── Stage 1: 検索条件を抽出 ──────────────────────
-            raw = tmp_path.read_text(encoding="utf-8")
-            head = raw[:SAMPLE_HEAD_CHARS]
-            tail = raw[-SAMPLE_TAIL_CHARS:] if len(raw) > SAMPLE_HEAD_CHARS + SAMPLE_TAIL_CHARS else ""
+            with open(tmp_path, "rb") as _f:
+                head_bytes = _f.read(SAMPLE_HEAD_CHARS * 4)
+                _f.seek(0, 2)
+                _total = _f.tell()
+                if _total > (SAMPLE_HEAD_CHARS + SAMPLE_TAIL_CHARS) * 4:
+                    _f.seek(max(0, _total - SAMPLE_TAIL_CHARS * 4))
+                    tail_bytes = _f.read()
+                else:
+                    tail_bytes = b""
+            head = head_bytes.decode("utf-8", errors="replace")[:SAMPLE_HEAD_CHARS]
+            tail = tail_bytes.decode("utf-8", errors="replace")[-SAMPLE_TAIL_CHARS:] if tail_bytes else ""
             sample = head + ("\n...\n" + tail if tail else "")
 
             criteria = await _get_search_criteria(bot, question, sample, channel_id)
@@ -259,7 +267,7 @@ def register(bot: "SlackBot"):
 
             lock = bot.get_channel_lock(channel_id)
             async with lock:
-                summary, timed_out = await run_claude(full_prompt, skill_instructions=skill_instr)
+                summary, timed_out = await run_engine(full_prompt, skill_instructions=skill_instr)
 
             if timed_out:
                 await client.chat_postMessage(

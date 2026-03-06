@@ -1,4 +1,5 @@
 {
+  "engine": "claude",
   "novnc_bind_address": "server address or tailscale address",
   "discord": {
     "enabled": false,

@@ -1,5 +1,10 @@
 """
-Claude Code CLI 実行
+LLM エンジン実行
+config.json の "engine" フィールドに応じて Claude Code CLI / Codex CLI などを切り替える。
+
+対応エンジン:
+  "claude" (デフォルト) — Claude Code CLI
+  "codex"               — OpenAI Codex CLI（将来実装）
 """
 
 from __future__ import annotations
@@ -13,20 +18,15 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-from core.config import (
-    CLAUDE_BIN,
-    BASE_DIR,
-    TIMEOUT_FAST, TIMEOUT_PLANNING,
-    get_skip_permissions,
-)
+import core.config as _cfg
+from core.config import BASE_DIR, TIMEOUT_FAST, TIMEOUT_PLANNING, get_skip_permissions
+
 
 def _logger() -> logging.Logger:
-    from core.config import _tl_get
-    name = _tl_get("PLATFORM_NAME")
-    return logging.getLogger(f"{name}_bot" if name else "discord_bot")
+    return _cfg._logger()
 
 
-async def run_claude(
+async def run_engine(
     prompt: str,
     model: str = "sonnet",
     thinking: bool = False,
@@ -38,11 +38,34 @@ async def run_claude(
 ) -> tuple[str, bool]:
     """(response_text, timed_out) を返す。
 
-    on_process: プロセス起動直後に呼ばれるコールバック。
-    外部からプロセスを参照してキャンセルする用途に使う。
-    skill_instructions: スキルエンジンから注入される追加指示。
-    プロンプトの先頭に付加される。
+    config.json の "engine" に応じて実装を切り替える。
+    on_process: プロセス起動直後に呼ばれるコールバック。キャンセル用途。
+    skill_instructions: プロンプト先頭に付加されるスキル追加指示。
     """
+    engine = _cfg.get_engine_name()
+    if engine == "codex":
+        return await _run_codex_cli(
+            prompt, model, timeout, on_process, skill_instructions
+        )
+    return await _run_claude_cli(
+        prompt, model, thinking, timeout,
+        session_id, is_new_session, on_process, skill_instructions,
+    )
+
+
+async def _run_claude_cli(
+    prompt: str,
+    model: str,
+    thinking: bool,
+    timeout: int | None,
+    session_id: str | None,
+    is_new_session: bool,
+    on_process: "Callable[[asyncio.subprocess.Process], None] | None",
+    skill_instructions: str,
+) -> tuple[str, bool]:
+    """Claude Code CLI を subprocess で実行する。"""
+    from core.config import CLAUDE_BIN
+
     if timeout is None:
         timeout = TIMEOUT_PLANNING if thinking else TIMEOUT_FAST
 
@@ -61,7 +84,10 @@ async def run_claude(
             cmd += ["--resume", session_id]
 
     total_len = len(prompt) + (len(skill_instructions) if skill_instructions else 0)
-    _logger().info("claude: model=%s thinking=%s prompt_len=%d timeout=%ds", model, thinking, total_len, timeout)
+    _logger().info(
+        "engine=claude model=%s thinking=%s prompt_len=%d timeout=%ds",
+        model, thinking, total_len, timeout,
+    )
 
     env = dict(os.environ)
     if skill_instructions:
@@ -94,7 +120,7 @@ async def run_claude(
             try:
                 proc.kill()
                 await proc.wait()
-            except Exception:
+            except ProcessLookupError:
                 pass
         return "", True
     except asyncio.CancelledError:
@@ -102,6 +128,28 @@ async def run_claude(
             try:
                 proc.kill()
                 await proc.wait()
-            except Exception:
+            except ProcessLookupError:
                 pass
         raise  # タスクキャンセルは上位に伝搬させる
+
+
+async def _run_codex_cli(
+    prompt: str,
+    model: str,
+    timeout: int | None,
+    on_process: "Callable[[asyncio.subprocess.Process], None] | None",
+    skill_instructions: str,
+) -> tuple[str, bool]:
+    """OpenAI Codex CLI を subprocess で実行する（将来実装）。"""
+    raise NotImplementedError("Codex CLI engine は未実装です")
+
+
+def validate_engine_bin() -> None:
+    """設定されたエンジンのバイナリが存在するか確認する。なければ即終了する。"""
+    import sys
+    engine = _cfg.get_engine_name()
+    if engine == "codex":
+        # 将来: CODEX_BIN の存在確認をここに追加
+        raise NotImplementedError("Codex CLI engine は未実装です")
+    # デフォルト: Claude CLI
+    _cfg.validate_claude_bin()

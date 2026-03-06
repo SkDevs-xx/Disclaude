@@ -21,7 +21,7 @@ from core.config import (
     get_model_config,
     get_no_mention_channels,
 )
-from core.claude import run_claude
+from core.engine import run_engine
 from core.message import split_message
 from core.attachments import process_attachment
 
@@ -29,20 +29,6 @@ if TYPE_CHECKING:
     from platforms.slack.bot import SlackBot
 
 logger = logging.getLogger("slack_bot")
-
-
-def _make_dummy_attachment(filename: str, url: str, content_type: str, size: int):
-    """Slack ファイルオブジェクトを process_attachment が受け付ける形式に変換するラッパー。"""
-
-    class _Att:
-        pass
-
-    att = _Att()
-    att.filename = filename
-    att.url = url
-    att.content_type = content_type
-    att.size = size
-    return att
 
 
 async def _download_slack_file(url: str, token: str) -> bytes | None:
@@ -160,7 +146,7 @@ async def handle_claude_message(
                 + (f"\n{bot.platform_context.format_hint}\n" if bot.platform_context.format_hint else "")
                 + (f"\n{registry_instr}" if registry_instr else "")
             )
-            response, timed_out = await run_claude(
+            response, timed_out = await run_engine(
                 full_prompt,
                 model=model,
                 thinking=thinking,

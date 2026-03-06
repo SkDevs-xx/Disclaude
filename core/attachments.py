@@ -19,7 +19,19 @@ try:
 except ImportError:
     PDF_AVAILABLE = False
 
-logger = logging.getLogger("discord_bot")
+def _logger() -> logging.Logger:
+    return _cfg._logger()
+
+
+_http_session: aiohttp.ClientSession | None = None
+
+
+def _get_http_session() -> aiohttp.ClientSession:
+    global _http_session
+    if _http_session is None or _http_session.closed:
+        _http_session = aiohttp.ClientSession()
+    return _http_session
+
 
 TEXT_EXTENSIONS = {".txt", ".csv", ".md", ".py", ".js", ".ts", ".json", ".yaml", ".yml",
                    ".toml", ".ini", ".cfg", ".sh", ".html", ".css", ".xml", ".log"}
@@ -45,9 +57,9 @@ async def process_attachment(attachment) -> tuple[str | None, Path | None]:
     safe_name = f"{uuid.uuid4().hex[:8]}_{attachment.filename}"
     save_path = _cfg.ATTACHMENTS_DIR / safe_name
 
-    async with aiohttp.ClientSession() as session:
-        async with session.get(attachment.url) as resp:
-            data = await resp.read()
+    session = _get_http_session()
+    async with session.get(attachment.url) as resp:
+        data = await resp.read()
 
     async with aiofiles.open(save_path, "wb") as f:
         await f.write(data)
@@ -83,6 +95,6 @@ async def process_attachment(attachment) -> tuple[str | None, Path | None]:
             save_path.unlink(missing_ok=True)
             return f"\n\n（添付ファイル: {attachment.filename}、種別: {ext or '不明'}）\n", None
     except Exception as e:
-        logger.exception("Attachment processing error: %s", e)
+        _logger().exception("Attachment processing error: %s", e)
         save_path.unlink(missing_ok=True)
         return f"\n\n（添付ファイル処理エラー: {attachment.filename}）\n", None

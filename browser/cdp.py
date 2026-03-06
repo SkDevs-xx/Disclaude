@@ -95,7 +95,13 @@ class CDPClient:
 
     async def get_targets(self, port: int = 9222) -> list[dict]:
         """Chrome のタブ一覧を取得する（接続不要）。"""
-        async with aiohttp.ClientSession() as session:
+        session = self._session
+        if session is None or session.closed:
+            session = aiohttp.ClientSession()
+            async with session:
+                async with session.get(f"http://127.0.0.1:{port}/json") as resp:
+                    targets = await resp.json()
+        else:
             async with session.get(f"http://127.0.0.1:{port}/json") as resp:
                 targets = await resp.json()
         return [t for t in targets if t.get("type") == "page"]

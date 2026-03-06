@@ -4,7 +4,6 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -21,18 +20,3 @@ class PlatformContext:
     disabled_skills: frozenset[str] = field(    # このプラットフォームで無効なスキル名
         default_factory=frozenset,
     )
-
-
-class PlatformAdapter(ABC):
-    """プラットフォーム固有の起動・実行を抽象化する基底クラス。"""
-
-    def __init__(self, context: PlatformContext):
-        self.context = context
-
-    @abstractmethod
-    async def start(self) -> None:
-        """プラットフォームのボット/クライアントを起動する。"""
-
-    @abstractmethod
-    async def stop(self) -> None:
-        """プラットフォームのボット/クライアントを停止する。"""

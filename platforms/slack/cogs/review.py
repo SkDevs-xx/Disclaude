@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 import core.config as _cfg
 from core.config import get_channel_session, save_channel_session, get_model_config
-from core.claude import run_claude
+from core.engine import run_engine
 from core.message import split_message
 from core.memory import parse_pending_reviews, resolve_archive
 
@@ -98,7 +98,7 @@ def register(bot: "SlackBot"):
             + (f"\n{bot.platform_context.format_hint}\n" if bot.platform_context.format_hint else "")
             + (f"\n{registry_instr}" if registry_instr else "")
         )
-        response_text, timed_out = await run_claude(
+        response_text, timed_out = await run_engine(
             prompt,
             model=model,
             thinking=thinking,
