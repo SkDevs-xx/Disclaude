@@ -258,6 +258,10 @@ class ClaudeBot(commands.Bot):
         full_prompt = user_content + injected_text
 
         try:
+            try:
+                await message.add_reaction("🤔")
+            except Exception:
+                pass
             async with message.channel.typing():
                 async with self.get_channel_lock(channel_id):
                     session_id = get_channel_session(channel_id)
@@ -302,6 +306,10 @@ class ClaudeBot(commands.Bot):
             for chunk in chunks[1:]:
                 await message.channel.send(chunk)
         finally:
+            try:
+                await message.remove_reaction("🤔", self.user)
+            except Exception:
+                pass
             # workspace/temp/ の画像ファイルをクリーンアップ
             for p in image_paths:
                 try:

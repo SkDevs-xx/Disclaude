@@ -252,3 +252,20 @@ def save_channel_session(channel_id: int | str, session_id: str) -> None:
                 data = {}
         data[str(channel_id)] = session_id
         _atomic_write_json(f, data)
+
+def delete_channel_session(channel_id: int | str) -> bool:
+    with _sessions_lock:
+        f = _tl_get("SESSIONS_FILE")
+        if not f.exists():
+            return False
+        try:
+            with open(f, encoding="utf-8") as fp:
+                data = json.load(fp)
+        except (json.JSONDecodeError, ValueError):
+            return False
+        key = str(channel_id)
+        if key not in data:
+            return False
+        del data[key]
+        _atomic_write_json(f, data)
+        return True

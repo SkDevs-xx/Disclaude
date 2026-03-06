@@ -21,6 +21,7 @@ from core.config import (
     set_no_mention,
     get_channel_session,
     save_channel_session,
+    delete_channel_session,
     BASE_DIR,
 )
 from core.engine import run_engine
@@ -208,6 +209,26 @@ def register(bot: "SlackBot"):
             await respond(text=":white_check_mark: タスクをキャンセルしました。", response_type="ephemeral")
         else:
             await respond(text=":information_source: 実行中のタスクはありません。", response_type="ephemeral")
+
+    # ── /reset ─────────────────────────────────────────
+    @app.command("/reset-ai")
+    async def cmd_reset(ack, respond, command):
+        await ack()
+        channel_id = command.get("channel_id", "")
+        task = bot.running_tasks.get(channel_id)
+        if task and not task.done():
+            proc = bot.running_processes.get(channel_id)
+            if proc:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+            task.cancel()
+        deleted = delete_channel_session(channel_id)
+        if deleted:
+            await respond(text=":white_check_mark: セッションをリセットしました。次のメッセージから新しい会話が始まります。", response_type="ephemeral")
+        else:
+            await respond(text=":information_source: このチャンネルにはアクティブなセッションがありません。", response_type="ephemeral")
 
     # ── /mention ─────────────────────────────────────────
     @app.command("/mention-ai")

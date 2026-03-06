@@ -237,6 +237,7 @@ Discord と Slack で同等のコマンドが使えます。Discord はプレフ
 | `/model` | `/model-ai` | モデル（Sonnet / Opus / Haiku）と Thinking ON/OFF を設定 |
 | `/status` | `/status-ai` | 現在のモデル・Thinking・実行中タスクの確認（Slack はスレッド返信 ON/OFF も設定可） |
 | `/cancel` | `/cancel-ai` | 現在のチャンネルで実行中のプロセスを中止 |
+| `/reset` | `/reset-ai` | 会話セッションをリセット（次のメッセージから新しい会話が始まる） |
 | `/mention` | `/mention-ai` | このチャンネルでのメンション要否を設定（OFF にするとメンションなしで反応） |
 
 ### スケジュール
@@ -640,7 +641,7 @@ clive/
 │   │   ├── embeds.py                # Discord Embed 生成
 │   │   ├── utils.py                 # get_guild_channels, make_discord_collector
 │   │   ├── cogs/
-│   │   │   ├── utility.py           # /model, /status, /cancel, /mention
+│   │   │   ├── utility.py           # /model, /status, /cancel, /reset, /mention
 │   │   │   ├── schedule.py          # スケジュール管理
 │   │   │   ├── summarize.py         # チャンネル要約
 │   │   │   ├── heartbeat.py         # 自律巡回エージェント
@@ -652,7 +653,7 @@ clive/
 │       ├── utils.py                 # get_workspace_channels, make_slack_collector
 │       ├── cogs/
 │       │   ├── message.py           # app_mention + DM + メンション不要チャンネル
-│       │   ├── commands.py          # /model-ai, /status-ai, /cancel-ai, /mention-ai
+│       │   ├── commands.py          # /model-ai, /status-ai, /cancel-ai, /reset-ai, /mention-ai
 │       │   ├── schedule.py          # /schedule-ai
 │       │   ├── summarize.py         # /summarize-ai
 │       │   ├── heartbeat.py         # /heartbeat-ai（Heartbeat 専用 Thinking 設定付き）

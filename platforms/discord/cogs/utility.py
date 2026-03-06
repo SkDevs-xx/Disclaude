@@ -13,7 +13,7 @@ from core.config import (
     load_platform_config, save_platform_config,
     get_model_config,
     get_no_mention_channels, set_no_mention,
-    get_channel_session, save_channel_session,
+    get_channel_session, save_channel_session, delete_channel_session,
     BASE_DIR,
 )
 from core.engine import run_engine
@@ -242,6 +242,30 @@ class UtilityCog(commands.Cog):
         else:
             await interaction.response.send_message(
                 embed=make_info_embed("キャンセル", "実行中のタスクはありません。"), ephemeral=True
+            )
+
+    @app_commands.command(name="reset", description="会話セッションをリセットする")
+    async def reset_command(self, interaction: discord.Interaction):
+        channel_id = interaction.channel_id
+        task = self.bot.running_tasks.get(channel_id)
+        if task and not task.done():
+            proc = self.bot.running_processes.get(channel_id)
+            if proc:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+            task.cancel()
+        deleted = delete_channel_session(channel_id)
+        if deleted:
+            await interaction.response.send_message(
+                embed=make_info_embed("リセット", "セッションをリセットしました。次のメッセージから新しい会話が始まります。"),
+                ephemeral=True,
+            )
+        else:
+            await interaction.response.send_message(
+                embed=make_info_embed("リセット", "このチャンネルにはアクティブなセッションがありません。"),
+                ephemeral=True,
             )
 
     @app_commands.command(name="mention", description="このチャンネルでのメンション要否を設定する")
