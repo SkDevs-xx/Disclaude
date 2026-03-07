@@ -183,12 +183,24 @@ class SlackBot:
             await self.browser_manager.start()
 
         # Socket Mode で接続
-        handler = AsyncSocketModeHandler(self.app, self.app_token)
+        self.handler = AsyncSocketModeHandler(self.app, self.app_token)
         logger.info("Starting Slack bot (Socket Mode)...")
-        await handler.start_async()
+        try:
+            await self.handler.start_async()
+        except asyncio.CancelledError:
+            logger.info("Slack bot start task cancelled")
+        finally:
+            await self.stop()
 
     async def stop(self):
         """Bot を停止する。"""
+        if hasattr(self, "handler") and self.handler:
+            try:
+                await self.handler.close_async()
+            except Exception:
+                pass
+            self.handler = None
+            
         if self.browser_manager:
             await self.browser_manager.stop()
         from core.attachments import close_http_session
