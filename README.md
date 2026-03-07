@@ -8,7 +8,7 @@
 
 AI CLI エンジン（Claude Code CLI / Codex CLI 等）をサブプロセスとして直接実行するアーキテクチャにより、API キーの管理やトークン課金が不要。各 CLI の定額サブスクリプションだけで動作する。ファイルベースの永続記憶（SOUL.md / USER.md / EMOTION.md）で人格・記憶・感情を持ち、単なるタスク実行ツールではなく「住み着く AI」として振る舞う。
 
-> プロジェクト名 "disclaude" は Discord + Claude の合成語に由来。現在は Discord / Slack のマルチプラットフォームに対応。
+> プロジェクト名 "clive" は AI + CLI + Live の合成語に由来。現在は Discord / Slack のマルチプラットフォームに対応。
 
 ## アーキテクチャ
 

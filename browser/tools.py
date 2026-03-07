@@ -11,8 +11,8 @@ from .cdp import CDPClient
 
 
 def _load_port() -> int:
-    """DISCLAUDE_PLATFORM 環境変数を参照してプラットフォーム別の CDP ポートを読み取る。"""
-    platform = os.environ.get("DISCLAUDE_PLATFORM", "discord")
+    """CLIVE_PLATFORM 環境変数を参照してプラットフォーム別の CDP ポートを読み取る。"""
+    platform = os.environ.get("CLIVE_PLATFORM", "discord")
     config_path = Path(__file__).resolve().parent.parent / "config.json"
     try:
         with open(config_path) as f:
@@ -24,7 +24,7 @@ def _load_port() -> int:
 
 # MCP サーバーはプラットフォームごとに独立したプロセスとして起動されるため、
 # CDPClient のシングルトンはプロセス間で共有されない。
-# 各プロセスは DISCLAUDE_PLATFORM 環境変数で自身のプラットフォームを識別し、
+# 各プロセスは CLIVE_PLATFORM 環境変数で自身のプラットフォームを識別し、
 # 対応する CDP ポートに接続する。
 cdp = CDPClient()
 _connected_port: int | None = None

@@ -18,9 +18,9 @@ clive ユーザーに切り替えてホーム直下にクローン:
 
 ```bash
 sudo su - clive
-git clone https://github.com/SkDevs-xx/disclaude.git
-cp -r disclaude/. /home/clive/
-rm -rf /home/clive/disclaude/
+git clone https://github.com/SkDevs-xx/Clive.git
+cp -r Clive/. /home/clive/
+rm -rf /home/clive/Clive/
 ```
 
 Python 仮想環境を作成して依存パッケージをインストール:

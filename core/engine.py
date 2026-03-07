@@ -93,7 +93,7 @@ async def _run_claude_cli(
     if skill_instructions:
         m = re.search(r"\[platform:\s*(\w+)\]", skill_instructions)
         if m:
-            env["DISCLAUDE_PLATFORM"] = m.group(1)
+            env["CLIVE_PLATFORM"] = m.group(1)
 
     proc: asyncio.subprocess.Process | None = None
     try:
