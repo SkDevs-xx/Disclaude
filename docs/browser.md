@@ -2,7 +2,7 @@
 
 AI に X への投稿や Gmail の確認など、**ログイン済みの Web サービスをブラウザ経由で操作**させたい場合に設定する。
 
-Playwright MCP と違い、ユーザーが事前にログインした状態（X、Gmail 等）を維持したまま Claude がブラウザを操作できる。
+Playwright MCP と違い、ユーザーが事前にログインした状態（X、Gmail 等）を維持したまま Clive がブラウザを操作できる。
 
 ## 仕組み
 
@@ -11,7 +11,7 @@ Chrome（永続プロファイル + CDP ポート）
   ↑ WebSocket（CDP 直接接続 + asyncio.Lock で排他制御）
 MCP サーバー（browser/server.py）
   ↑ stdin/stdout（MCP プロトコル）
-Claude Code
+Clive (Claude / Codex)
 ```
 
 ## 環境別の違い
@@ -154,7 +154,7 @@ ssh -L 6081:localhost:6081 clive@your-server
 
 ## MCP ツール一覧
 
-Claude が使えるブラウザ操作ツール（23 個）:
+Clive が使えるブラウザ操作ツール（23 個）:
 
 ### Navigation
 

@@ -9,6 +9,11 @@
 AI CLI エンジン（Claude Code CLI / Codex CLI 等）をサブプロセスとして直接実行するアーキテクチャにより、API キーの管理やトークン課金が不要。各 CLI の定額サブスクリプションだけで動作する。ファイルベースの永続記憶（SOUL.md / USER.md / EMOTION.md）で人格・記憶・感情を持ち、単なるタスク実行ツールではなく「住み着く AI」として振る舞う。
 
 > プロジェクト名 "clive" は AI + CLI + Live の合成語に由来。現在は Discord / Slack のマルチプラットフォームに対応。
+> OpenAI Codex CLI および Anthropic Claude Code CLI に対応。</br>
+> ⚠️ **既存ユーザーへ:**>バージョンアップに伴い、Codexでも利用出来るようになりました。
+> 1. プロジェクトルートの `CLAUDE.md` を `AGENTS.md` に手動でリネームしてください。</br>
+> 2. 99行目の （`CLAUDE.md`）を自分で編集しない → （`AGENTS.md`）を自分で編集しない に変更すること。</br>
+> 3. config.json の "engine": "claude"　→ "engine": "codex" へ変更
 
 ## アーキテクチャ
 
