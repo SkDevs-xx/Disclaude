@@ -19,7 +19,7 @@ _tl = threading.local()
 # ─────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent.parent
 CONFIG_FILE = BASE_DIR / "config.json"
-ENGINE_MD_FILE = BASE_DIR / "CLAUDE.md"
+
 LOG_DIR = BASE_DIR / "log"
 
 # スレッドローカルで管理するワークスペース変数のデフォルト値
@@ -63,6 +63,12 @@ def __getattr__(name: str):
 
     _cfg.WORKFLOW_DIR のように直接参照しても、スレッドローカル値が返る。
     """
+    if name == "ENGINE_MD_FILE":
+        try:
+            return BASE_DIR / "AGENTS.md" if get_engine_name() == "codex" else BASE_DIR / "CLAUDE.md"
+        except SystemExit:
+            return BASE_DIR / "CLAUDE.md"
+
     if name in _WORKSPACE_DEFAULTS:
         return _tl_get(name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -1,6 +1,6 @@
 """
 HeartbeatCog: 定期自律タスク（Heartbeat）管理
-- X分ごとに HEARTBEAT.md を読み込み Claude で評価
+- X分ごとに HEARTBEAT.md を読み込み Cliveで評価
 - HEARTBEAT_OK → サイレント / WRAPUP_NEEDED → Wrap-up 実行 / その他 → 通知
 - /heartbeat コマンドでステータス表示 + 設定変更 UI
 """

@@ -53,7 +53,14 @@ exit
 
 ### Codex CLI（`"engine": "codex"`）
 
-> 現在開発中。対応予定。
+```bash
+sudo su - clive
+npm i -g @openai/codex
+codex login
+exit
+```
+
+> **既存ユーザー向け:** 過去に `CLAUDE.md` というファイルをお使いの場合、最新版では Codex 向けに `AGENTS.md` にコピーする必要があります（`cp CLAUDE.md AGENTS.md`）。Claude ユーザーはそのままで構いません。
 
 ## 4. トークンの設定
 

@@ -57,7 +57,7 @@ async def run_wrapup(
     wrapup_time: str = "00:00",
 ) -> str | None:
     """
-    メッセージを収集して Claude で要約する。
+    メッセージを収集して Cliveで要約する。
     collect_messages: プラットフォーム固有のメッセージ収集関数
     format_hint: 出力形式の指示（プラットフォーム固有）
     """
