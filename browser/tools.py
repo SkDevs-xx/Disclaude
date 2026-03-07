@@ -125,8 +125,15 @@ def register_tools(mcp: FastMCP) -> None:
             })
         return json.dumps({"double_clicked": {"x": x, "y": y}})
 
-    @mcp.tool(name="browser_type", description="テキストを入力する。事前にクリックで入力欄にフォーカスしてから使う")
+    @mcp.tool(name="browser_type", description="テキストを入力する。事前にクリックで入力欄にフォーカスしてから使う。高速（一括入力）")
     async def browser_type(text: str) -> str:
+        if block := await _ensure_connected():
+            return block
+        await cdp.send("Input.insertText", {"text": text})
+        return json.dumps({"typed": text}, ensure_ascii=False)
+
+    @mcp.tool(name="browser_type_slow", description="テキストを1文字ずつ入力する。Input.insertText で動作しないサイト向け")
+    async def browser_type_slow(text: str) -> str:
         if block := await _ensure_connected():
             return block
         for char in text:
@@ -170,6 +177,91 @@ def register_tools(mcp: FastMCP) -> None:
             "deltaX": 0, "deltaY": delta_y,
         })
         return json.dumps({"scrolled": direction, "amount": amount})
+
+    # ─── Combined Actions（高速化） ───
+
+    @mcp.tool(name="browser_click_element", description="CSSセレクタまたはテキストで要素を見つけてクリックする。find_element + click を1ステップで実行")
+    async def browser_click_element(selector: str = "", text: str = "") -> str:
+        if block := await _ensure_connected():
+            return block
+        if not selector and not text:
+            return json.dumps({"error": "selector or text is required"}, ensure_ascii=False)
+        if selector:
+            js = f"""
+                (() => {{
+                    const el = document.querySelector({json.dumps(selector)});
+                    if (!el) return {{ error: 'element not found', selector: {json.dumps(selector)} }};
+                    el.scrollIntoView({{ block: 'center', behavior: 'instant' }});
+                    el.click();
+                    const r = el.getBoundingClientRect();
+                    return {{
+                        clicked: true,
+                        tag: el.tagName.toLowerCase(),
+                        text: (el.innerText || '').slice(0, 100),
+                        x: Math.round(r.x + r.width / 2),
+                        y: Math.round(r.y + r.height / 2),
+                    }};
+                }})()
+            """
+        else:
+            js = f"""
+                (() => {{
+                    const search = {json.dumps(text)}.toLowerCase();
+                    const walker = document.createTreeWalker(
+                        document.body, NodeFilter.SHOW_TEXT, null
+                    );
+                    while (walker.nextNode()) {{
+                        const node = walker.currentNode;
+                        if (node.textContent.toLowerCase().includes(search)) {{
+                            const el = node.parentElement;
+                            const r = el.getBoundingClientRect();
+                            if (r.width > 0 && r.height > 0) {{
+                                el.scrollIntoView({{ block: 'center', behavior: 'instant' }});
+                                el.click();
+                                return {{
+                                    clicked: true,
+                                    tag: el.tagName.toLowerCase(),
+                                    text: (el.innerText || '').slice(0, 100),
+                                    x: Math.round(r.x + r.width / 2),
+                                    y: Math.round(r.y + r.height / 2),
+                                }};
+                            }}
+                        }}
+                    }}
+                    return {{ error: 'element not found', search: {json.dumps(text)} }};
+                }})()
+            """
+        result = await cdp.send("Runtime.evaluate", {
+            "expression": js,
+            "returnByValue": True,
+        })
+        return json.dumps(result.get("result", {}).get("value", {}), ensure_ascii=False, indent=2)
+
+    @mcp.tool(name="browser_fill", description="CSSセレクタで入力欄を見つけてテキストを入力する。find + click + clear + type を1ステップで実行")
+    async def browser_fill(selector: str, value: str) -> str:
+        if block := await _ensure_connected():
+            return block
+        js = f"""
+            (() => {{
+                const el = document.querySelector({json.dumps(selector)});
+                if (!el) return {{ error: 'element not found', selector: {json.dumps(selector)} }};
+                el.scrollIntoView({{ block: 'center', behavior: 'instant' }});
+                el.focus();
+                const nativeSetter =
+                    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set ||
+                    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+                if (nativeSetter) nativeSetter.call(el, {json.dumps(value)});
+                else el.value = {json.dumps(value)};
+                el.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                el.dispatchEvent(new Event('change', {{ bubbles: true }}));
+                return {{ filled: true, selector: {json.dumps(selector)}, value: {json.dumps(value)} }};
+            }})()
+        """
+        result = await cdp.send("Runtime.evaluate", {
+            "expression": js,
+            "returnByValue": True,
+        })
+        return json.dumps(result.get("result", {}).get("value", {}), ensure_ascii=False, indent=2)
 
     # ─── Inspection ───
 
@@ -261,6 +353,53 @@ def register_tools(mcp: FastMCP) -> None:
         })
         elements = result.get("result", {}).get("value", [])
         return json.dumps({"elements": elements}, ensure_ascii=False, indent=2)
+
+    @mcp.tool(name="browser_snapshot", description="ページ上のインタラクティブ要素（リンク・ボタン・入力欄等）をすべて取得する。ページ構造の把握に使う")
+    async def browser_snapshot() -> str:
+        if block := await _ensure_connected():
+            return block
+        js = """
+            (() => {
+                const items = [];
+                const seen = new Set();
+                document.querySelectorAll(
+                    'a[href], button, input, select, textarea, [role="button"], [role="link"], [role="tab"], [onclick], summary'
+                ).forEach(el => {
+                    const r = el.getBoundingClientRect();
+                    if (r.width <= 0 || r.height <= 0) return;
+                    const key = `${Math.round(r.x)},${Math.round(r.y)}`;
+                    if (seen.has(key)) return;
+                    seen.add(key);
+                    const item = {
+                        tag: el.tagName.toLowerCase(),
+                        x: Math.round(r.x + r.width / 2),
+                        y: Math.round(r.y + r.height / 2),
+                    };
+                    const label = (
+                        el.ariaLabel || el.title || el.placeholder ||
+                        el.innerText || el.value || el.alt || ''
+                    ).trim().slice(0, 80);
+                    if (label) item.label = label;
+                    if (el.type) item.type = el.type;
+                    if (el.tagName === 'A' && el.href) item.href = el.href.slice(0, 120);
+                    if (el.id) item.id = el.id;
+                    if (el.name) item.name = el.name;
+                    items.push(item);
+                });
+                return {
+                    url: window.location.href,
+                    title: document.title,
+                    elements: items,
+                    total: items.length,
+                };
+            })()
+        """
+        result = await cdp.send("Runtime.evaluate", {
+            "expression": js,
+            "returnByValue": True,
+        })
+        data = result.get("result", {}).get("value", {})
+        return json.dumps(data, ensure_ascii=False, indent=2)
 
     # ─── Tabs ───
 
