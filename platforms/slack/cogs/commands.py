@@ -345,6 +345,9 @@ def register(bot: "SlackBot"):
                     session_id = str(uuid.uuid4())
                     save_channel_session(channel_id, session_id)
 
+                task = asyncio.current_task()
+                bot.running_tasks[channel_id] = task
+
                 model, thinking = get_model_config()
                 registry_instr = bot.skill_registry.build_instructions(
                     bot.platform_context.name,
@@ -376,6 +379,8 @@ def register(bot: "SlackBot"):
             if response:
                 await client.chat_postMessage(channel=channel_id, text=response)
         finally:
+            bot.running_tasks.pop(channel_id, None)
+            bot.running_processes.pop(channel_id, None)
             try:
                 ts = body.get("message", {}).get("ts", "")
                 if ts:
