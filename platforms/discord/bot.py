@@ -314,6 +314,8 @@ class ClaudeBot(commands.Bot):
             for chunk in chunks[1:]:
                 await message.channel.send(chunk)
         finally:
+            self.running_tasks.pop(channel_id, None)
+            self.running_processes.pop(channel_id, None)
             try:
                 await message.remove_reaction("🤔", self.user)
             except Exception:

@@ -41,9 +41,18 @@ def _heartbeat_file():
 
 
 def _read_heartbeat_text() -> str:
-    """HEARTBEAT.md の内容を返す。存在しなければ空文字列。"""
+    """HEARTBEAT.md の内容を返す。存在しなければ空文字列。（同期版: __init__ 等で使用）"""
     hb = _heartbeat_file()
     return hb.read_text(encoding="utf-8") if hb.exists() else ""
+
+
+async def _read_heartbeat_text_async() -> str:
+    """HEARTBEAT.md の内容を返す。存在しなければ空文字列。（非同期版）"""
+    import asyncio
+    hb = _heartbeat_file()
+    if not hb.exists():
+        return ""
+    return await asyncio.to_thread(hb.read_text, encoding="utf-8")
 
 # 重複抑制: {message_hash: last_sent_datetime}
 _sent_warnings: dict[str, datetime] = {}
@@ -302,7 +311,7 @@ class HeartbeatCog(commands.Cog):
 
     async def _run_heartbeat(self) -> None:
         """Heartbeat メインループ。結果は通知チャンネルに送信する。"""
-        text = _read_heartbeat_text()
+        text = await _read_heartbeat_text_async()
         if not text.strip():
             return
 
@@ -413,7 +422,7 @@ class HeartbeatCog(commands.Cog):
             logger.warning("Heartbeat: wrapup failed for all guilds, wrapup_done remains false")
 
         # 圧縮チェック
-        state = parse_heartbeat_state(_read_heartbeat_text())
+        state = parse_heartbeat_state(await _read_heartbeat_text_async())
         for guild in self.bot.guilds:
             await self._maybe_compress(guild.id, state)
 
@@ -588,7 +597,7 @@ class HeartbeatCog(commands.Cog):
     # ─────────────────────────────────────────────
     @app_commands.command(name="heartbeat", description="Heartbeatの状態表示・設定変更")
     async def heartbeat_command(self, interaction: discord.Interaction):
-        text = _read_heartbeat_text()
+        text = await _read_heartbeat_text_async()
         if not text:
             await interaction.response.send_message(
                 embed=make_error_embed("HEARTBEAT.md が見つかりません。"), ephemeral=True

@@ -44,8 +44,18 @@ def _heartbeat_file():
 
 
 def _read_heartbeat_text() -> str:
+    """HEARTBEAT.md の内容を返す。存在しなければ空文字列。（同期版）"""
     hb = _heartbeat_file()
     return hb.read_text(encoding="utf-8") if hb.exists() else ""
+
+
+async def _read_heartbeat_text_async() -> str:
+    """HEARTBEAT.md の内容を返す。存在しなければ空文字列。（非同期版）"""
+    import asyncio
+    hb = _heartbeat_file()
+    if not hb.exists():
+        return ""
+    return await asyncio.to_thread(hb.read_text, encoding="utf-8")
 
 
 def _status_text(state: dict, cfg: dict) -> str:
@@ -133,7 +143,7 @@ def _status_blocks(state: dict, cfg: dict, channels: list[tuple[str, str]]) -> l
 
 async def _run_heartbeat_core(bot: "SlackBot"):
     """Heartbeat メインループ。"""
-    text = _read_heartbeat_text()
+    text = await _read_heartbeat_text_async()
     if not text.strip():
         return
 
@@ -218,7 +228,7 @@ async def _trigger_wrapup(bot: "SlackBot", notify_channel_id: str | None, wrapup
     except Exception as e:
         logger.exception("Heartbeat: wrapup error: %s", e)
 
-    state = parse_heartbeat_state(_read_heartbeat_text())
+    state = parse_heartbeat_state(await _read_heartbeat_text_async())
     await _maybe_compress(bot, state)
 
 
@@ -266,8 +276,12 @@ async def _compress_daily_to_weekly(guild_dir, today: date):
             continue
     if not old_files:
         return
+    import asyncio as _aio
     old_files.sort(key=lambda f: f.stem)
-    contents = [f"## {f.stem}\n{f.read_text(encoding='utf-8')}" for f in old_files]
+    contents = []
+    for f in old_files:
+        text = await _aio.to_thread(f.read_text, encoding="utf-8")
+        contents.append(f"## {f.stem}\n{text}")
     combined = "\n\n---\n\n".join(contents)
     iso_cal = today.isocalendar()
     week_file = guild_dir / f"{iso_cal.year}-W{iso_cal.week:02d}.md"
@@ -279,7 +293,7 @@ async def _compress_daily_to_weekly(guild_dir, today: date):
     summary, timed_out = await run_engine(prompt)
     if timed_out or not summary:
         return
-    week_file.write_text(f"# 週次サマリー ({iso_cal.year}-W{iso_cal.week:02d})\n\n{summary}\n", encoding="utf-8")
+    await _aio.to_thread(week_file.write_text, f"# 週次サマリー ({iso_cal.year}-W{iso_cal.week:02d})\n\n{summary}\n", encoding="utf-8")
     for f in old_files:
         f.unlink()
     logger.info("Heartbeat: compressed %d daily files -> %s", len(old_files), week_file.name)
@@ -297,8 +311,12 @@ async def _compress_weekly_to_monthly(guild_dir, today: date):
             continue
     if not old_files:
         return
+    import asyncio as _aio
     old_files.sort(key=lambda f: f.stem)
-    contents = [f"## {f.stem}\n{f.read_text(encoding='utf-8')}" for f in old_files]
+    contents = []
+    for f in old_files:
+        text = await _aio.to_thread(f.read_text, encoding="utf-8")
+        contents.append(f"## {f.stem}\n{text}")
     combined = "\n\n---\n\n".join(contents)
     month_file = guild_dir / f"{today.year}-{today.month:02d}.md"
     prompt = (
@@ -309,7 +327,7 @@ async def _compress_weekly_to_monthly(guild_dir, today: date):
     summary, timed_out = await run_engine(prompt)
     if timed_out or not summary:
         return
-    month_file.write_text(f"# 月次サマリー ({today.year}-{today.month:02d})\n\n{summary}\n", encoding="utf-8")
+    await _aio.to_thread(month_file.write_text, f"# 月次サマリー ({today.year}-{today.month:02d})\n\n{summary}\n", encoding="utf-8")
     for f in old_files:
         f.unlink()
     logger.info("Heartbeat: compressed %d weekly files -> %s", len(old_files), month_file.name)

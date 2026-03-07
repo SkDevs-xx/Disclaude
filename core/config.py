@@ -103,16 +103,11 @@ def _do_atomic_write_json(path: Path, data) -> None:
 
 
 def _atomic_write_json(path: Path, data) -> None:
-    """適宜スレッドプールを利用して JSON を安全に書き込む。"""
-    import asyncio
-    try:
-        loop = asyncio.get_running_loop()
-        # イベントループが実行中の場合は別スレッドで実行してブロックを回避する
-        # （呼び出し側が await していないため Fire-and-Forget になるが、ファイルの書き込み自体はアトミック）
-        loop.run_in_executor(None, _do_atomic_write_json, path, data)
-    except RuntimeError:
-        # イベントループがない（同期実行時など）はそのまま実行
-        _do_atomic_write_json(path, data)
+    """JSON を安全に書き込む（同期関数）。
+
+    イベントループ内から呼ぶ場合は asyncio.to_thread でラップすること。
+    """
+    _do_atomic_write_json(path, data)
 
 
 # ─────────────────────────────────────────────
@@ -127,6 +122,7 @@ _channel_names_lock = threading.Lock()
 _sessions_lock = threading.Lock()
 
 def load_config() -> dict:
+    import copy
     global _config_cache, _config_mtime
     with _config_lock:
         try:
@@ -134,15 +130,15 @@ def load_config() -> dict:
         except OSError:
             mtime = 0.0
         if _config_cache is not None and mtime == _config_mtime:
-            return _config_cache
+            return copy.deepcopy(_config_cache)
         if not CONFIG_FILE.exists():
             _config_cache = {}
             _config_mtime = 0.0
-            return _config_cache
+            return copy.deepcopy(_config_cache)
         with open(CONFIG_FILE, encoding="utf-8") as f:
             _config_cache = json.load(f)
         _config_mtime = mtime
-        return _config_cache
+        return copy.deepcopy(_config_cache)
 
 def get_skip_permissions() -> bool:
     return load_platform_config().get("skip_permissions", True)
@@ -160,9 +156,9 @@ def get_engine_name() -> str:
 def save_config(cfg: dict) -> None:
     global _config_cache, _config_mtime
     with _config_lock:
-        _atomic_write_json(CONFIG_FILE, cfg)
-        _config_cache = cfg
+        _do_atomic_write_json(CONFIG_FILE, cfg)
         _config_mtime = os.path.getmtime(CONFIG_FILE)
+        _config_cache = cfg
 
 
 # ─────────────────────────────────────────────
