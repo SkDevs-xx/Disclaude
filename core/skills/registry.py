@@ -18,6 +18,7 @@ class SkillRegistry:
 
     def __init__(self) -> None:
         self._skills: dict[str, Skill] = {}
+        self.load_errors: list[tuple[Path, str]] = []
 
     def register(self, skill: Skill) -> None:
         """スキルを登録する。同名のスキルは上書き。"""
@@ -25,12 +26,11 @@ class SkillRegistry:
         logger.debug("Skill registered: %s", skill.name)
 
     def reload(self, skills_dir: Path) -> int:
-        """スキルを再スキャンして登録する（既存の登録をクリアして再構築）。"""
-        self._skills.clear()
+        """スキルを再スキャンして登録する（アトミック更新）。"""
         return self.scan_directory(skills_dir)
 
     def scan_directory(self, skills_dir: Path) -> int:
-        """ディレクトリ配下の SKILL.md を再帰スキャンして登録する。
+        """ディレクトリ配下の SKILL.md を再帰スキャンして登録する（アトミック更新）。
 
         Returns:
             登録されたスキル数
@@ -40,13 +40,22 @@ class SkillRegistry:
             logger.warning("Skills directory not found: %s", skills_dir)
             return 0
 
-        for skill_file in sorted(skills_dir.rglob("SKILL.md")):
-            skill = load_skill(skill_file)
-            if skill is not None:
-                self.register(skill)
-                count += 1
+        new_skills: dict[str, Skill] = {}
+        new_errors: list[tuple[Path, str]] = []
 
-        logger.info("Scanned %s: %d skill(s) loaded", skills_dir, count)
+        for skill_file in sorted(skills_dir.rglob("SKILL.md")):
+            skill, err = load_skill(skill_file)
+            if skill is not None:
+                new_skills[skill.name] = skill
+                count += 1
+            elif err is not None:
+                new_errors.append((skill_file, err))
+
+        # アトミックに参照を入れ替え
+        self._skills = new_skills
+        self.load_errors = new_errors
+
+        logger.info("Scanned %s: %d skill(s) loaded atomically", skills_dir, count)
         return count
 
     def get(self, name: str) -> Skill | None:

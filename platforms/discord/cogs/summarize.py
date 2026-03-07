@@ -14,6 +14,7 @@ import json
 import logging
 import re
 import tempfile
+import aiofiles
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -95,9 +96,7 @@ class SummarizeCog(commands.Cog):
         # スレッドにも対応: get_channel_or_thread でキャッシュ済みオブジェクトを取得
         channel = self.bot.get_channel(interaction.channel_id) or interaction.channel
         if channel is None:
-            await interaction.followup.send(
-                embed=make_error_embed("チャンネルが見つかりません。"), ephemeral=True
-            )
+            await interaction.edit_original_response(embed=make_error_embed("チャンネルが見つかりません。"))
             return
 
         question = prompt or "主なトピック・決定事項・重要な発言を簡潔に日本語でまとめてください。"
@@ -117,33 +116,29 @@ class SummarizeCog(commands.Cog):
             msg_count = 0
 
             try:
-                with open(tmp_fd, "w", encoding="utf-8") as f:
+                async with aiofiles.open(tmp_fd, "w", encoding="utf-8") as f:
                     async for msg in channel.history(limit=None, oldest_first=True):
                         if not msg.content:
                             continue
                         ts = msg.created_at.strftime("%Y-%m-%d %H:%M")
                         line = f"[{ts}] {msg.author.display_name}: {msg.content}\n"
-                        f.write(line)
+                        await f.write(line)
                         total_chars += len(line)
                         msg_count += 1
                         if total_chars >= FETCH_CHAR_CAP:
                             truncated = True
                             break
             except discord.Forbidden:
-                await interaction.followup.send(
+                await interaction.edit_original_response(
                     embed=make_error_embed(
                         "メッセージ履歴の読み取り権限がありません。\n"
                         "Discordのチャンネル権限で「メッセージ履歴を読む」をボットに付与してください。"
-                    ),
-                    ephemeral=True,
+                    )
                 )
                 return
             except Exception as e:
                 logger.exception("summarize: history fetch error: %s", e)
-                await interaction.followup.send(
-                    embed=make_error_embed(f"メッセージ取得中にエラーが発生しました: {e}"),
-                    ephemeral=True,
-                )
+                await interaction.edit_original_response(embed=make_error_embed(f"メッセージ取得中にエラーが発生しました: {e}"))
                 return
 
             logger.info("summarize: fetched %d msgs, truncated=%s", msg_count, truncated)
@@ -153,20 +148,17 @@ class SummarizeCog(commands.Cog):
             )
 
             if msg_count == 0:
-                await interaction.followup.send(
-                    embed=make_info_embed("要約", "メッセージが見つかりませんでした。"),
-                    ephemeral=True,
-                )
+                await interaction.edit_original_response(embed=make_info_embed("要約", "メッセージが見つかりませんでした。"))
                 return
 
             # ─── tmp ファイルから先頭・末尾サンプルを生成 ──────────────────────
-            with open(tmp_path, "rb") as _f:
-                head_bytes = _f.read(SAMPLE_HEAD_CHARS * 4)
-                _f.seek(0, 2)
-                _total = _f.tell()
+            async with aiofiles.open(tmp_path, "rb") as _f:
+                head_bytes = await _f.read(SAMPLE_HEAD_CHARS * 4)
+                await _f.seek(0, 2)
+                _total = await _f.tell()
                 if _total > (SAMPLE_HEAD_CHARS + SAMPLE_TAIL_CHARS) * 4:
-                    _f.seek(max(0, _total - SAMPLE_TAIL_CHARS * 4))
-                    tail_bytes = _f.read()
+                    await _f.seek(max(0, _total - SAMPLE_TAIL_CHARS * 4))
+                    tail_bytes = await _f.read()
                 else:
                     tail_bytes = b""
             head = head_bytes.decode("utf-8", errors="replace")[:SAMPLE_HEAD_CHARS]
@@ -195,8 +187,8 @@ class SummarizeCog(commands.Cog):
 
             lines = []
             char_count = 0
-            with open(tmp_path, encoding="utf-8") as f:
-                for line in f:
+            async with aiofiles.open(tmp_path, encoding="utf-8") as f:
+                async for line in f:
                     line = line.rstrip("\n")
                     if not line:
                         continue
@@ -225,8 +217,8 @@ class SummarizeCog(commands.Cog):
 
             # フィルタ結果が空なら全件（上限まで）にフォールバック
             if not lines:
-                with open(tmp_path, encoding="utf-8") as f:
-                    for line in f:
+                async with aiofiles.open(tmp_path, encoding="utf-8") as f:
+                    async for line in f:
                         line = line.rstrip("\n")
                         if not line:
                             continue
@@ -248,20 +240,21 @@ class SummarizeCog(commands.Cog):
                 summary, timed_out = await run_engine(full_prompt)
 
             if timed_out:
-                await interaction.followup.send(
-                    embed=make_error_embed("タイムアウトしました。"), ephemeral=True
-                )
+                await interaction.edit_original_response(embed=make_error_embed("タイムアウトしました。"))
                 return
 
             display_summary = re.sub(r'\n{2,}', '\n', summary) if summary else ""
             chunks = split_message(display_summary, max_len=2000)
-            for chunk in chunks:
-                await interaction.followup.send(content=chunk)
+            if chunks:
+                await interaction.edit_original_response(content=chunks[0])
+                for chunk in chunks[1:]:
+                    await interaction.followup.send(content=chunk)
 
         finally:
             # tmp ファイルを必ず削除
             if tmp_path and tmp_path.exists():
-                tmp_path.unlink()
+                import asyncio
+                await asyncio.to_thread(tmp_path.unlink)
 
 
 async def setup(bot: commands.Bot):

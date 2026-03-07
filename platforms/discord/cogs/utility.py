@@ -278,21 +278,34 @@ class UtilityCog(commands.Cog):
 
     @app_commands.command(name="skills-list", description="利用可能なスキル一覧を表示し、選択で発動する")
     async def skills_list_command(self, interaction: discord.Interaction):
-        self.bot.skill_registry.reload(BASE_DIR / "skills")
+        import asyncio
+        from core.config import BASE_DIR
+        await asyncio.to_thread(self.bot.skill_registry.reload, BASE_DIR / "skills")
         skills = [s for s in self.bot.skill_registry.all_skills() if s.user_invocable]
 
-        if not skills:
+        errors = self.bot.skill_registry.load_errors
+
+        if not skills and not errors:
             await interaction.response.send_message(
                 embed=make_info_embed("スキル一覧", "利用可能なスキルがありません。"), ephemeral=True
             )
             return
 
         embed = discord.Embed(title="利用可能なスキル", color=0x5865F2)
-        for skill in skills[:25]:
-            desc = skill.description[:100] + "…" if len(skill.description) > 100 else skill.description
-            embed.add_field(name=skill.name, value=desc, inline=False)
+        if skills:
+            for skill in skills[:25]:
+                desc = skill.description[:100] + "…" if len(skill.description) > 100 else skill.description
+                embed.add_field(name=skill.name, value=desc, inline=False)
+        else:
+            embed.description = "利用可能なスキルはありません。"
 
-        view = SkillsListView(self.bot, skills)
+        if errors:
+            err_text = ""
+            for p, err in errors:
+                err_text += f"• `{p.parent.name}`: {err}\n"
+            embed.add_field(name="⚠️ 読み込みエラーのスキル", value=err_text[:1024], inline=False)
+
+        view = SkillsListView(self.bot, skills) if skills else None
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 

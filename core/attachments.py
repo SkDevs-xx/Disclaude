@@ -33,6 +33,14 @@ def _get_http_session() -> aiohttp.ClientSession:
     return _http_session
 
 
+async def close_http_session() -> None:
+    """グローバル HTTP セッションを閉じる。Bot 停止時に呼ぶ。"""
+    global _http_session
+    if _http_session is not None and not _http_session.closed:
+        await _http_session.close()
+        _http_session = None
+
+
 TEXT_EXTENSIONS = {".txt", ".csv", ".md", ".py", ".js", ".ts", ".json", ".yaml", ".yml",
                    ".toml", ".ini", ".cfg", ".sh", ".html", ".css", ".xml", ".log"}
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
@@ -59,24 +67,37 @@ async def process_attachment(attachment) -> tuple[str | None, Path | None]:
 
     session = _get_http_session()
     async with session.get(attachment.url) as resp:
-        data = await resp.read()
-
-    async with aiofiles.open(save_path, "wb") as f:
-        await f.write(data)
+        if resp.status != 200:
+            _logger().warning("Discord file download failed: status %s", resp.status)
+            return f"\n\n（添付ファイル: {attachment.filename} — ダウンロード失敗: {resp.status}）\n", None
+            
+        cl = resp.headers.get("Content-Length")
+        if cl and int(cl) > MAX_ATTACHMENT_SIZE:
+            mb = int(cl) / (1024 * 1024)
+            return f"\n\n（添付ファイル: {attachment.filename} — サイズ超過: {mb:.1f} MB、上限 10 MB）\n", None
+            
+        downloaded = 0
+        async with aiofiles.open(save_path, "wb") as f:
+            async for chunk in resp.content.iter_chunked(1024 * 1024):
+                downloaded += len(chunk)
+                if downloaded > MAX_ATTACHMENT_SIZE:
+                    save_path.unlink(missing_ok=True)
+                    return f"\n\n（添付ファイル: {attachment.filename} — ダウンロード中のサイズ超過）\n", None
+                await f.write(chunk)
 
     try:
         if ext in TEXT_EXTENSIONS:
-            content = save_path.read_text(encoding="utf-8", errors="replace")
+            import asyncio
+            content = await asyncio.to_thread(save_path.read_text, encoding="utf-8", errors="replace")
             save_path.unlink(missing_ok=True)
             return f"\n\n--- 添付ファイル: {attachment.filename} ---\n{content[:4000]}\n---\n", None
 
         elif ext in IMAGE_EXTENSIONS:
             # attachments/ に保存されたファイルを削除し、workspace/tmp/ に保存
-            save_path.unlink(missing_ok=True)
             _cfg.TMP_DIR.mkdir(parents=True, exist_ok=True)
             tmp_path = _cfg.TMP_DIR / safe_name
-            async with aiofiles.open(tmp_path, "wb") as f:
-                await f.write(data)
+            # ファイルをリネーム（移動）する。Windows対応のため shutil.move を検討するか、同一ファイルシステム前提なら rename で良い
+            save_path.rename(tmp_path)
             abs_path = tmp_path.resolve()
             text = (
                 f"\n\n--- 添付画像: {attachment.filename} ---\n"
@@ -87,7 +108,8 @@ async def process_attachment(attachment) -> tuple[str | None, Path | None]:
             return text, tmp_path
 
         elif ext == PDF_EXTENSION and PDF_AVAILABLE:
-            text = pdf_extract_text(str(save_path))
+            import asyncio
+            text = await asyncio.to_thread(pdf_extract_text, str(save_path))
             save_path.unlink(missing_ok=True)
             return f"\n\n--- PDF: {attachment.filename} ---\n{text[:4000]}\n---\n", None
 

@@ -417,6 +417,9 @@ class ScheduleActionView(discord.ui.View):
     async def run_now(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer(ephemeral=True)
         schedules = load_schedules()
+        if schedules is None:
+            await interaction.followup.send(embed=make_error_embed("スケジュールデータが破損しています。"), ephemeral=True)
+            return
         target = next((s for s in schedules if s["id"] == self.schedule_id), None)
         if not target:
             await interaction.followup.send(embed=make_error_embed("スケジュールが見つかりません。"), ephemeral=True)
@@ -429,6 +432,9 @@ class ScheduleActionView(discord.ui.View):
     @discord.ui.button(label="編集", style=discord.ButtonStyle.primary)
     async def edit(self, interaction: discord.Interaction, button: discord.ui.Button):
         schedules = load_schedules()
+        if schedules is None:
+            await interaction.response.send_message(embed=make_error_embed("スケジュールデータが破損しています。"), ephemeral=True)
+            return
         target = next((s for s in schedules if s["id"] == self.schedule_id), None)
         if not target:
             await interaction.response.send_message(embed=make_error_embed("スケジュールが見つかりません。"), ephemeral=True)
@@ -443,6 +449,9 @@ class ScheduleActionView(discord.ui.View):
     @discord.ui.button(label="一時停止", style=discord.ButtonStyle.secondary)
     async def pause(self, interaction: discord.Interaction, button: discord.ui.Button):
         schedules = load_schedules()
+        if schedules is None:
+            await interaction.response.send_message(embed=make_error_embed("スケジュールデータが破損しています。"), ephemeral=True)
+            return
         for s in schedules:
             if s["id"] == self.schedule_id:
                 s["status"] = "paused"
@@ -454,7 +463,11 @@ class ScheduleActionView(discord.ui.View):
 
     @discord.ui.button(label="削除", style=discord.ButtonStyle.danger)
     async def delete(self, interaction: discord.Interaction, button: discord.ui.Button):
-        schedules = [s for s in load_schedules() if s["id"] != self.schedule_id]
+        _scheds = load_schedules()
+        if _scheds is None:
+            await interaction.response.send_message(embed=make_error_embed("スケジュールデータが破損しています。"), ephemeral=True)
+            return
+        schedules = [s for s in _scheds if s["id"] != self.schedule_id]
         save_schedules(schedules)
         self.bot._reload_schedules()
         await interaction.response.send_message(
@@ -471,6 +484,8 @@ async def _commit_schedule(bot: commands.Bot, interaction: discord.Interaction, 
     try:
         new_id = "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
         schedules = load_schedules()
+        if schedules is None:
+            schedules = []
         schedules.append({
             "id": new_id, "name": name, "cron": cron,
             "prompt": prompt, "channel_id": str(channel_id),
@@ -499,6 +514,9 @@ async def _commit_schedule(bot: commands.Bot, interaction: discord.Interaction, 
 async def _apply_schedule_edit(bot: commands.Bot, interaction: discord.Interaction, schedule_id: str, name: str, prompt: str, cron: str, channel_id: int, model: str = "sonnet", thinking: bool = False):
     try:
         schedules = load_schedules()
+        if schedules is None:
+            await interaction.response.send_message(embed=make_error_embed("スケジュールデータが破損しています。"), ephemeral=True)
+            return
         for s in schedules:
             if s["id"] == schedule_id:
                 s["name"] = name
@@ -548,6 +566,9 @@ class ScheduleCog(commands.Cog):
     @schedule.command(name="list", description="スケジュール一覧を表示する")
     async def schedule_list(self, interaction: discord.Interaction):
         schedules = load_schedules()
+        if schedules is None:
+            await interaction.response.send_message(embed=make_error_embed("スケジュールデータが破損しています。"), ephemeral=True)
+            return
         if not schedules:
             await interaction.response.send_message(
                 embed=make_info_embed("スケジュール一覧", "スケジュールはまだありません。"), ephemeral=True

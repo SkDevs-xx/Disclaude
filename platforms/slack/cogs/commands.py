@@ -276,14 +276,17 @@ def register(bot: "SlackBot"):
     @app.command("/skills-list")
     async def cmd_skills_list(ack, command, client):
         await ack()
-        bot.skill_registry.reload(BASE_DIR / "skills")
+        import asyncio
+        await asyncio.to_thread(bot.skill_registry.reload, BASE_DIR / "skills")
         skills = [s for s in bot.skill_registry.all_skills() if s.user_invocable]
         channel_id = command["channel_id"]
         user_id = command["user_id"]
 
-        if not skills:
+        errors = bot.skill_registry.load_errors
+
+        if not skills and not errors:
             await client.chat_postEphemeral(
-                channel=channel_id, user=user_id, text="利用可能なスキルがありません。"
+                channel=channel_id, user=user_id, text=":information_source: 利用可能なスキルがありません。"
             )
             return
 
@@ -291,6 +294,16 @@ def register(bot: "SlackBot"):
             {"type": "section", "text": {"type": "mrkdwn", "text": "*利用可能なスキル*"}},
             {"type": "divider"},
         ]
+        if not skills:
+            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": "現在利用可能なスキルはありません。"}})
+
+        if errors:
+            err_text = ""
+            for p, err in errors:
+                err_text += f"• `{p.parent.name}`: {err}\n"
+            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*⚠️ 読み込みエラーのスキル*\n{err_text}"}})
+            blocks.append({"type": "divider"})
+
         for skill in skills:
             desc = skill.description[:80] + "…" if len(skill.description) > 80 else skill.description
             blocks.append({
@@ -333,6 +346,9 @@ def register(bot: "SlackBot"):
                     session_id = str(uuid.uuid4())
                     save_channel_session(channel_id, session_id)
 
+                task = asyncio.current_task()
+                bot.running_tasks[channel_id] = task
+
                 model, thinking = get_model_config()
                 registry_instr = bot.skill_registry.build_instructions(
                     bot.platform_context.name,
@@ -364,6 +380,8 @@ def register(bot: "SlackBot"):
             if response:
                 await client.chat_postMessage(channel=channel_id, text=response)
         finally:
+            bot.running_tasks.pop(channel_id, None)
+            bot.running_processes.pop(channel_id, None)
             try:
                 ts = body.get("message", {}).get("ts", "")
                 if ts:

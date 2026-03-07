@@ -80,11 +80,16 @@ class SlackBot:
 
     def _reload_schedules(self):
         """schedules.json を読み込んでスケジューラに登録する。"""
+        schedules = load_schedules()
+        if schedules is None:
+            logger.error("schedules.json is corrupted. Skipping schedule reload.")
+            return
+
         for job in self.scheduler.get_jobs():
             if job.id.startswith("sched_"):
                 job.remove()
 
-        for s in load_schedules():
+        for s in schedules:
             if s.get("status") != "active":
                 continue
             try:
@@ -95,6 +100,7 @@ class SlackBot:
                     id=f"sched_{s['id']}",
                     replace_existing=True,
                     args=[s],
+                    misfire_grace_time=60,
                 )
             except Exception as e:
                 logger.error("Schedule load error (%s): %s", s.get("id"), e)
@@ -149,11 +155,12 @@ class SlackBot:
             logger.exception("Schedule execution error (%s / %s): %s", s.get("id"), s.get("name"), e)
         finally:
             schedules = load_schedules()
-            for item in schedules:
-                if item.get("id") == s.get("id") and item.get("id"):
-                    item["run_count"] = item.get("run_count", 0) + 1
-                    item["last_run"] = datetime.now(timezone.utc).isoformat()
-            save_schedules(schedules)
+            if schedules is not None:
+                for item in schedules:
+                    if item.get("id") == s.get("id") and item.get("id"):
+                        item["run_count"] = item.get("run_count", 0) + 1
+                        item["last_run"] = datetime.now(timezone.utc).isoformat()
+                save_schedules(schedules)
 
     async def start(self):
         """Bot を起動する。"""
@@ -177,12 +184,26 @@ class SlackBot:
             await self.browser_manager.start()
 
         # Socket Mode で接続
-        handler = AsyncSocketModeHandler(self.app, self.app_token)
+        self.handler = AsyncSocketModeHandler(self.app, self.app_token)
         logger.info("Starting Slack bot (Socket Mode)...")
-        await handler.start_async()
+        try:
+            await self.handler.start_async()
+        except asyncio.CancelledError:
+            logger.info("Slack bot start task cancelled")
+        finally:
+            await self.stop()
 
     async def stop(self):
         """Bot を停止する。"""
+        if hasattr(self, "handler") and self.handler:
+            try:
+                await self.handler.close_async()
+            except Exception:
+                pass
+            self.handler = None
+            
         if self.browser_manager:
             await self.browser_manager.stop()
+        from core.attachments import close_http_session
+        await close_http_session()
         self.scheduler.shutdown(wait=False)

@@ -124,6 +124,24 @@ async def run_wrapup(
     guild_dir = get_wrapup_dir() / str(guild_id)
     guild_dir.mkdir(parents=True, exist_ok=True)
     wp_file = daily_wrapup_path(guild_id, d_from)
-    wp_file.write_text(f"# {date_label}\n\n{summary}\n", encoding="utf-8")
+    
+    import asyncio
+    import tempfile
+    import os
+
+    def _safe_write():
+        fd, tmp = tempfile.mkstemp(dir=guild_dir, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(f"# {date_label}\n\n{summary}\n")
+            os.replace(tmp, wp_file)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+
+    await asyncio.to_thread(_safe_write)
 
     return summary

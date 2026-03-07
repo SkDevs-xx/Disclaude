@@ -41,7 +41,8 @@ class ReviewCog(commands.Cog):
             )
             return
 
-        text = _review_file().read_text(encoding="utf-8")
+        import asyncio
+        text = await asyncio.to_thread(_review_file().read_text, encoding="utf-8")
         items = parse_pending_reviews(text)
 
         if not items:
@@ -61,7 +62,8 @@ class ReviewCog(commands.Cog):
             if item["archive_rel"]:
                 path = resolve_archive(_cfg.WORKFLOW_DIR, item["archive_rel"])
                 if path:
-                    content = path.read_text(encoding="utf-8")
+                    import asyncio
+                    content = await asyncio.to_thread(path.read_text, encoding="utf-8")
                 else:
                     content = "（アーカイブファイルが見つかりませんでした）"
             else:

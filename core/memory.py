@@ -42,14 +42,37 @@ def parse_heartbeat_state(text: str) -> dict:
     return state
 
 
-def update_heartbeat_state(heartbeat_path: Path, key: str, value: str) -> None:
+async def update_heartbeat_state(heartbeat_path: Path, key: str, value: str) -> None:
     """HEARTBEAT.md 内の指定キーの値を書き換える。"""
-    if not heartbeat_path.exists():
+    await update_heartbeat_states(heartbeat_path, {key: value})
+
+
+async def update_heartbeat_states(heartbeat_path: Path, updates: dict[str, str]) -> None:
+    """HEARTBEAT.md 内の複数キーの値を一括で書き換える（アトミック）。"""
+    import asyncio
+    import os
+    import tempfile
+    if not heartbeat_path.exists() or not updates:
         return
-    text = heartbeat_path.read_text(encoding="utf-8")
-    pattern = rf"({re.escape(key)}:\s*).*"
-    new_text = re.sub(pattern, rf"\g<1>{value}", text)
-    heartbeat_path.write_text(new_text, encoding="utf-8")
+
+    def _atomic_update():
+        text = heartbeat_path.read_text(encoding="utf-8")
+        for key, value in updates.items():
+            pattern = rf"({re.escape(key)}:\s*).*"
+            text = re.sub(pattern, rf"\g<1>{value}", text)
+        fd, tmp = tempfile.mkstemp(dir=heartbeat_path.parent, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(text)
+            os.replace(tmp, heartbeat_path)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+
+    await asyncio.to_thread(_atomic_update)
 
 
 def get_checklist_section(text: str) -> str:
@@ -58,18 +81,35 @@ def get_checklist_section(text: str) -> str:
     return m.group(1).strip() if m else ""
 
 
-def update_checklist_section(heartbeat_path: Path, new_content: str) -> None:
+async def update_checklist_section(heartbeat_path: Path, new_content: str) -> None:
     """HEARTBEAT.md の「## 毎回チェック」セクションを書き換える。"""
+    import asyncio
+    import os
+    import tempfile
     if not heartbeat_path.exists():
         return
-    text = heartbeat_path.read_text(encoding="utf-8")
-    new_text = re.sub(
-        r"(## 毎回チェック\n).*?(?=\n## |\Z)",
-        rf"\g<1>{new_content}\n",
-        text,
-        flags=re.DOTALL,
-    )
-    heartbeat_path.write_text(new_text, encoding="utf-8")
+
+    def _atomic_update():
+        text = heartbeat_path.read_text(encoding="utf-8")
+        new_text = re.sub(
+            r"(## 毎回チェック\n).*?(?=\n## |\Z)",
+            rf"\g<1>{new_content}\n",
+            text,
+            flags=re.DOTALL,
+        )
+        fd, tmp = tempfile.mkstemp(dir=heartbeat_path.parent, suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(new_text)
+            os.replace(tmp, heartbeat_path)
+        except BaseException:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            raise
+
+    await asyncio.to_thread(_atomic_update)
 
 
 def should_run_wrapup(state: dict) -> bool:

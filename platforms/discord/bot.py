@@ -96,11 +96,16 @@ class ClaudeBot(commands.Bot):
 
     def _reload_schedules(self):
         """schedules.json を読み込んでスケジューラに登録"""
+        schedules = load_schedules()
+        if schedules is None:
+            logger.error("schedules.json is corrupted. Skipping schedule reload.")
+            return
+
         for job in self.scheduler.get_jobs():
             if job.id.startswith("sched_"):
                 job.remove()
 
-        for s in load_schedules():
+        for s in schedules:
             if s.get("status") != "active":
                 continue
             try:
@@ -111,6 +116,7 @@ class ClaudeBot(commands.Bot):
                     id=f"sched_{s['id']}",
                     args=[s],
                     replace_existing=True,
+                    misfire_grace_time=60,
                 )
             except Exception as e:
                 logger.error("Schedule load error (%s): %s", s.get("id"), e)
@@ -165,15 +171,18 @@ class ClaudeBot(commands.Bot):
         finally:
             # run_count / last_run は成功・失敗に関わらず更新
             schedules = load_schedules()
-            for item in schedules:
-                if item["id"] == s["id"]:
-                    item["run_count"] = item.get("run_count", 0) + 1
-                    item["last_run"] = datetime.now(timezone.utc).isoformat()
-            save_schedules(schedules)
+            if schedules is not None:
+                for item in schedules:
+                    if item["id"] == s["id"]:
+                        item["run_count"] = item.get("run_count", 0) + 1
+                        item["last_run"] = datetime.now(timezone.utc).isoformat()
+                save_schedules(schedules)
 
     async def close(self):
         if self.browser_manager:
             await self.browser_manager.stop()
+        from core.attachments import close_http_session
+        await close_http_session()
         await super().close()
 
     async def on_ready(self):
@@ -243,21 +252,26 @@ class ClaudeBot(commands.Bot):
             )
             return
 
-        injected_text = ""
-        image_paths: list[Path] = []
-        for att in message.attachments:
-            text_part, image_path = await process_attachment(att)
-            if text_part:
-                injected_text += text_part
-            if image_path is not None:
-                image_paths.append(image_path)
-
-        if not user_content and not injected_text:
-            return
-
-        full_prompt = user_content + injected_text
-
         try:
+            injected_text = ""
+            image_paths: list[Path] = []
+            for att in message.attachments:
+                text_part, image_path = await process_attachment(att)
+                if text_part:
+                    injected_text += text_part
+                if image_path is not None:
+                    image_paths.append(image_path)
+
+            if not user_content and not injected_text:
+                return
+
+            full_prompt = ""
+            if user_content:
+                full_prompt += f"<user_input>\n{user_content}\n</user_input>\n"
+            if injected_text:
+                full_prompt += f"<attachments>\n{injected_text}\n</attachments>\n"
+            full_prompt = full_prompt.strip()
+
             try:
                 await message.add_reaction("🤔")
             except Exception:
@@ -290,9 +304,6 @@ class ClaudeBot(commands.Bot):
                         skill_instructions=skill_instr,
                     )
 
-                    self.running_tasks.pop(channel_id, None)
-                    self.running_processes.pop(channel_id, None)
-
             if timed_out:
                 await message.reply(embed=make_error_embed(
                     "タイムアウトしました。`/cancel` で再試行するか、少し待ってから再送してください。"
@@ -306,6 +317,8 @@ class ClaudeBot(commands.Bot):
             for chunk in chunks[1:]:
                 await message.channel.send(chunk)
         finally:
+            self.running_tasks.pop(channel_id, None)
+            self.running_processes.pop(channel_id, None)
             try:
                 await message.remove_reaction("🤔", self.user)
             except Exception:

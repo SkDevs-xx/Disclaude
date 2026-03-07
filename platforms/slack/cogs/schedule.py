@@ -457,6 +457,8 @@ def register(bot: "SlackBot"):
 
         new_id = "".join(random.choices(string.ascii_lowercase + string.digits, k=8))
         schedules = load_schedules()
+        if schedules is None:
+            schedules = []
         schedules.append({
             "id": new_id,
             "name": name,
@@ -491,6 +493,11 @@ def register(bot: "SlackBot"):
         sched_id = action_id.replace("sched_edit__", "")
         trigger_id = body.get("trigger_id", "")
         schedules = load_schedules()
+        if schedules is None:
+            user_id = body.get("user", {}).get("id", "")
+            if user_id:
+                await client.chat_postMessage(channel=user_id, text="⚠️ スケジュールデータが破損しています。")
+            return
         target = next((s for s in schedules if s.get("id") == sched_id), None)
         if not target:
             return
@@ -547,6 +554,11 @@ def register(bot: "SlackBot"):
             return
 
         schedules = load_schedules()
+        if schedules is None:
+            user_id = body.get("user", {}).get("id", "")
+            if user_id:
+                await client.chat_postMessage(channel=user_id, text="⚠️ スケジュールデータが破損しています。")
+            return
         for s in schedules:
             if s.get("id") == sched_id:
                 s["name"] = name
@@ -577,6 +589,9 @@ def register(bot: "SlackBot"):
         action_id = body["actions"][0]["action_id"]
         sched_id = action_id.replace("sched_run__", "")
         schedules = load_schedules()
+        if schedules is None:
+            await respond(text="⚠️ スケジュールデータが破損しています。")
+            return
         target = next((s for s in schedules if s["id"] == sched_id), None)
         if not target:
             await respond(text=":warning: スケジュールが見つかりません。", replace_original=False)
@@ -590,6 +605,9 @@ def register(bot: "SlackBot"):
         action_id = body["actions"][0]["action_id"]
         sched_id = action_id.replace("sched_pause__", "")
         schedules = load_schedules()
+        if schedules is None:
+            await respond(text="⚠️ スケジュールデータが破損しています。", replace_original=False)
+            return
         name = ""
         for s in schedules:
             if s["id"] == sched_id:
@@ -605,6 +623,9 @@ def register(bot: "SlackBot"):
         action_id = body["actions"][0]["action_id"]
         sched_id = action_id.replace("sched_delete__", "")
         schedules = load_schedules()
+        if schedules is None:
+            await respond(text="⚠️ スケジュールデータが破損しています。", replace_original=False)
+            return
         target = next((s for s in schedules if s["id"] == sched_id), None)
         name = target["name"] if target else sched_id
         schedules = [s for s in schedules if s["id"] != sched_id]

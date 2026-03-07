@@ -26,6 +26,9 @@ if _env_local.exists():
 
 logger = logging.getLogger("clive")
 
+_slack_bot_instance = None
+_slack_loop_instance = None
+
 
 def _setup_logging():
     """ロガーを設定する。"""
@@ -94,7 +97,23 @@ def _run_discord():
         d.mkdir(parents=True, exist_ok=True)
 
     from platforms.discord.bot import ClaudeBot
+    import asyncio
     bot = ClaudeBot()
+
+    original_close = bot.close
+    async def custom_close():
+        global _slack_bot_instance, _slack_loop_instance
+        if _slack_bot_instance and _slack_loop_instance and _slack_loop_instance.is_running():
+            logger.info("Coordinating Slack bot shutdown from Discord...")
+            try:
+                # Slack側のイベントループでstopを発火させる
+                # これによりhandler.close_async()が呼ばれ、Slack側のstart_async()が解放されてスレッドが正常終了する
+                asyncio.run_coroutine_threadsafe(_slack_bot_instance.stop(), _slack_loop_instance)
+            except Exception as e:
+                logger.error("Failed to shutdown Slack bot: %s", e)
+        await original_close()
+    
+    bot.close = custom_close
     bot.run(token, log_handler=None)
 
 
@@ -119,7 +138,19 @@ def _run_slack():
 
     from platforms.slack.bot import SlackBot
     bot = SlackBot(bot_token, app_token)
-    asyncio.run(bot.start())
+    
+    global _slack_bot_instance, _slack_loop_instance
+    _slack_bot_instance = bot
+
+    async def _async_main():
+        global _slack_loop_instance
+        _slack_loop_instance = asyncio.get_running_loop()
+        await bot.start()
+
+    try:
+        asyncio.run(_async_main())
+    except KeyboardInterrupt:
+        pass
 
 
 def main():
@@ -157,7 +188,7 @@ def main():
         # 両方有効な場合はスレッドで並列起動
         # Slack は asyncio.run() なので非メインスレッドでも動作する
         # discord.py の bot.run() はメインスレッドで動かす必要があるため Discord をメインに
-        t = threading.Thread(target=_run_slack, daemon=True)
+        t = threading.Thread(target=_run_slack, daemon=False)
         t.start()
         _run_discord()  # メインスレッドで Discord を起動
     elif slack_enabled:

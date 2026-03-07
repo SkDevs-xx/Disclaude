@@ -16,6 +16,7 @@ import json
 import logging
 import re
 import tempfile
+import aiofiles
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -130,7 +131,7 @@ def register(bot: "SlackBot"):
             msg_count = 0
             msg_cursor = None
 
-            with open(tmp_fd, "w", encoding="utf-8") as f:
+            async with aiofiles.open(tmp_fd, "w", encoding="utf-8") as f:
                 while True:
                     try:
                         kwargs: dict = {
@@ -151,7 +152,7 @@ def register(bot: "SlackBot"):
                             raw_user = msg.get("username") or msg.get("user", "unknown")
                             user = await _resolve_user(client, raw_user)
                             line = f"[{ts_str}] {user}: {msg['text']}\n"
-                            f.write(line)
+                            await f.write(line)
                             total_chars += len(line)
                             msg_count += 1
                             if total_chars >= FETCH_CHAR_CAP:
@@ -171,25 +172,19 @@ def register(bot: "SlackBot"):
             suffix = "（収集上限到達）" if truncated else ""
 
             if msg_count == 0:
-                await client.chat_postMessage(
-                    channel=user_id,
-                    text=":information_source: メッセージが見つかりませんでした。",
-                )
+                await respond(text=":information_source: メッセージが見つかりませんでした。", replace_original=True)
                 return
 
-            await client.chat_postMessage(
-                channel=user_id,
-                text=f":speech_balloon: {msg_count}件のメッセージを取得しました{suffix}。分析中...",
-            )
+            await respond(text=f":speech_balloon: {msg_count}件のメッセージを取得しました{suffix}。分析中...", replace_original=True)
 
             # ─── Stage 1: 検索条件を抽出 ──────────────────────
-            with open(tmp_path, "rb") as _f:
-                head_bytes = _f.read(SAMPLE_HEAD_CHARS * 4)
-                _f.seek(0, 2)
-                _total = _f.tell()
+            async with aiofiles.open(tmp_path, "rb") as _f:
+                head_bytes = await _f.read(SAMPLE_HEAD_CHARS * 4)
+                await _f.seek(0, 2)
+                _total = await _f.tell()
                 if _total > (SAMPLE_HEAD_CHARS + SAMPLE_TAIL_CHARS) * 4:
-                    _f.seek(max(0, _total - SAMPLE_TAIL_CHARS * 4))
-                    tail_bytes = _f.read()
+                    await _f.seek(max(0, _total - SAMPLE_TAIL_CHARS * 4))
+                    tail_bytes = await _f.read()
                 else:
                     tail_bytes = b""
             head = head_bytes.decode("utf-8", errors="replace")[:SAMPLE_HEAD_CHARS]
@@ -217,8 +212,8 @@ def register(bot: "SlackBot"):
 
             lines = []
             char_count = 0
-            with open(tmp_path, encoding="utf-8") as f:
-                for line in f:
+            async with aiofiles.open(tmp_path, encoding="utf-8") as f:
+                async for line in f:
                     line = line.rstrip("\n")
                     if not line:
                         continue
@@ -244,8 +239,8 @@ def register(bot: "SlackBot"):
                     char_count += len(line) + 1
 
             if not lines:
-                with open(tmp_path, encoding="utf-8") as f:
-                    for line in f:
+                async with aiofiles.open(tmp_path, encoding="utf-8") as f:
+                    async for line in f:
                         line = line.rstrip("\n")
                         if not line:
                             continue
@@ -270,17 +265,17 @@ def register(bot: "SlackBot"):
                 summary, timed_out = await run_engine(full_prompt, skill_instructions=skill_instr)
 
             if timed_out:
-                await client.chat_postMessage(
-                    channel=user_id,
-                    text=":warning: タイムアウトしました。",
-                )
+                await respond(text=":warning: タイムアウトしました。", replace_original=True)
                 return
 
             display_summary = re.sub(r"\n{3,}", "\n\n", summary) if summary else ""
             chunks = split_message(display_summary, max_len=3000)
-            for chunk in chunks:
-                await client.chat_postMessage(channel=channel_id, text=chunk)
+            if chunks:
+                await respond(text=chunks[0], replace_original=True)
+                for chunk in chunks[1:]:
+                    await client.chat_postMessage(channel=channel_id, text=chunk)
 
         finally:
             if tmp_path and tmp_path.exists():
-                tmp_path.unlink()
+                import asyncio
+                await asyncio.to_thread(tmp_path.unlink)

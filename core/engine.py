@@ -90,10 +90,9 @@ async def _run_claude_cli(
     )
 
     env = dict(os.environ)
-    if skill_instructions:
-        m = re.search(r"\[platform:\s*(\w+)\]", skill_instructions)
-        if m:
-            env["CLIVE_PLATFORM"] = m.group(1)
+    platform_name = _cfg._tl_get("PLATFORM_NAME")
+    if platform_name:
+        env["CLIVE_PLATFORM"] = platform_name
 
     proc: asyncio.subprocess.Process | None = None
     try:
@@ -104,6 +103,7 @@ async def _run_claude_cli(
             stderr=asyncio.subprocess.PIPE,
             cwd=str(BASE_DIR),
             env=env,
+            preexec_fn=os.setsid,
         )
         if on_process is not None:
             on_process(proc)
@@ -120,20 +120,32 @@ async def _run_claude_cli(
         return stdout.decode("utf-8", errors="replace").strip(), False
     except asyncio.TimeoutError:
         if proc is not None:
+            import signal
             try:
-                proc.kill()
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
                 await proc.wait()
-            except ProcessLookupError:
+            except (ProcessLookupError, OSError):
                 pass
         return "", True
     except asyncio.CancelledError:
         if proc is not None:
+            import signal
             try:
-                proc.kill()
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
                 await proc.wait()
-            except ProcessLookupError:
+            except (ProcessLookupError, OSError):
                 pass
         raise  # タスクキャンセルは上位に伝搬させる
+    except Exception as e:
+        _logger().exception("Unexpected engine error: %s", e)
+        if proc is not None:
+            import signal
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                await proc.wait()
+            except (ProcessLookupError, OSError):
+                pass
+        return f"エラーが発生しました: {e}", False
 
 
 async def _run_codex_cli(
