@@ -29,23 +29,30 @@ class CDPClient:
         """Chrome の CDP に接続する。"""
         self._session = aiohttp.ClientSession()
 
-        # タブ一覧を取得
-        async with self._session.get(f"http://127.0.0.1:{port}/json") as resp:
-            targets = await resp.json()
+        try:
+            # タブ一覧を取得
+            async with self._session.get(f"http://127.0.0.1:{port}/json") as resp:
+                targets = await resp.json()
 
-        # page タイプのタブをフィルタ
-        pages = [t for t in targets if t.get("type") == "page"]
-        if not pages:
-            raise ConnectionError("No page targets found in Chrome")
+            # page タイプのタブをフィルタ
+            pages = [t for t in targets if t.get("type") == "page"]
+            if not pages:
+                raise ConnectionError("No page targets found in Chrome")
 
-        if tab_index >= len(pages):
-            tab_index = 0
+            if tab_index >= len(pages):
+                tab_index = 0
 
-        ws_url = pages[tab_index]["webSocketDebuggerUrl"]
-        self._ws = await self._session.ws_connect(ws_url)
-        self._reader_task = asyncio.create_task(self._read_loop())
-        await self.send("Page.enable")
-        logger.info("Connected to Chrome CDP: %s", ws_url)
+            ws_url = pages[tab_index]["webSocketDebuggerUrl"]
+            self._ws = await self._session.ws_connect(ws_url)
+            self._reader_task = asyncio.create_task(self._read_loop())
+            await self.send("Page.enable")
+            logger.info("Connected to Chrome CDP: %s", ws_url)
+        except Exception:
+            # 接続失敗時にセッションをクリーンアップ
+            if self._session and not self._session.closed:
+                await self._session.close()
+            self._session = None
+            raise
 
     async def disconnect(self) -> None:
         """接続を閉じる。"""

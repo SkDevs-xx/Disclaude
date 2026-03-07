@@ -136,6 +136,16 @@ async def _run_claude_cli(
             except ProcessLookupError:
                 pass
         raise  # タスクキャンセルは上位に伝搬させる
+    except Exception as e:
+        _logger().exception("Unexpected engine error: %s", e)
+        if proc is not None:
+            import signal
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                await proc.wait()
+            except (ProcessLookupError, OSError):
+                pass
+        return f"エラーが発生しました: {e}", False
 
 
 async def _run_codex_cli(
