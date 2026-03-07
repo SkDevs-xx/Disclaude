@@ -202,7 +202,7 @@ async def handle_claude_message(
             await say(
                 text=":warning: タイムアウトしました。`/cancel` で再試行するか、少し待ってから再送してください。",
                 channel=channel_id,
-                thread_ts=reply_ts,
+                thread_ts=thread_ts,
             )
             return
 
@@ -211,7 +211,7 @@ async def handle_claude_message(
         for i, chunk in enumerate(chunks):
             if i > 0:
                 await asyncio.sleep(1.2)  # Rate Limit 回避
-            await say(text=chunk, channel=channel_id, thread_ts=reply_ts)
+            await say(text=chunk, channel=channel_id, thread_ts=thread_ts)
 
     finally:
         bot.running_tasks.pop(channel_id, None)
