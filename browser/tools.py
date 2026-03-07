@@ -1,4 +1,4 @@
-"""MCP ツール定義 — Claude に公開するブラウザ操作ツール。"""
+"""MCP ツール定義 — Cliveに公開するブラウザ操作ツール。"""
 
 import asyncio
 import json
@@ -11,15 +11,22 @@ from .cdp import CDPClient
 
 
 def _load_port() -> int:
-    """CLIVE_PLATFORM 環境変数を参照してプラットフォーム別の CDP ポートを読み取る。"""
+    """CLIVE_PLATFORM 環境変数を参照してプラットフォーム別の CDP ポートを読み取る。
+
+    プロセス起動後にポートは変わらないため、結果をキャッシュする。
+    """
+    global _cached_port
+    if _cached_port is not None:
+        return _cached_port
     platform = os.environ.get("CLIVE_PLATFORM", "discord")
     config_path = Path(__file__).resolve().parent.parent / "config.json"
     try:
         with open(config_path) as f:
             cfg = json.load(f)
-        return int(cfg.get(platform, {}).get("browser_cdp_port", 9222))
+        _cached_port = int(cfg.get(platform, {}).get("browser_cdp_port", 9222))
     except Exception:
-        return 9222
+        _cached_port = 9222
+    return _cached_port
 
 
 # MCP サーバーはプラットフォームごとに独立したプロセスとして起動されるため、
@@ -27,6 +34,7 @@ def _load_port() -> int:
 # 各プロセスは CLIVE_PLATFORM 環境変数で自身のプラットフォームを識別し、
 # 対応する CDP ポートに接続する。
 cdp = CDPClient()
+_cached_port: int | None = None
 _connected_port: int | None = None
 
 
@@ -61,21 +69,50 @@ def register_tools(mcp: FastMCP) -> None:
 
     # ─── Navigation ───
 
-    @mcp.tool(name="browser_navigate", description="指定した URL にブラウザを遷移させる")
+    @mcp.tool(name="browser_navigate", description="指定URLに遷移し、ページ読み込み完了を待ってからインタラクティブ要素一覧を返す")
     async def browser_navigate(url: str) -> str:
         if block := await _ensure_connected():
             return block
-        result = await cdp.send("Page.navigate", {"url": url})
-        return json.dumps({"navigated": url, "frameId": result.get("frameId", "")}, ensure_ascii=False)
+        await cdp.send("Page.navigate", {"url": url})
+        # ページ読み込み完了を待つ（最大15秒）
+        try:
+            load_result = await cdp.send("Runtime.evaluate", {
+                "expression": """
+                    new Promise(resolve => {
+                        if (document.readyState === 'complete') resolve('complete');
+                        else window.addEventListener('load', () => resolve('complete'));
+                    })
+                """,
+                "awaitPromise": True,
+                "returnByValue": True,
+            }, timeout=15.0)
+        except (TimeoutError, Exception):
+            pass
+        # snapshot を自動取得して返す
+        snapshot = await browser_snapshot()
+        return snapshot
 
-    @mcp.tool(name="browser_back", description="ブラウザの「戻る」ボタンを押す")
+    @mcp.tool(name="browser_back", description="ブラウザの『戻る』を押し、ページ読み込み完了を待つ")
     async def browser_back() -> str:
         if block := await _ensure_connected():
             return block
         await cdp.send("Runtime.evaluate", {
             "expression": "window.history.back()",
         })
-        await asyncio.sleep(0.5)
+        # ページロード完了を待つ（sleep(0.5) の代わりに正確な検知）
+        try:
+            await cdp.send("Runtime.evaluate", {
+                "expression": """
+                    new Promise(resolve => {
+                        if (document.readyState === 'complete') resolve('done');
+                        else window.addEventListener('load', () => resolve('done'));
+                    })
+                """,
+                "awaitPromise": True,
+                "returnByValue": True,
+            }, timeout=10.0)
+        except (TimeoutError, Exception):
+            pass
         return json.dumps({"action": "back"})
 
     @mcp.tool(name="browser_reload", description="現在のページを再読み込みする")
@@ -102,27 +139,22 @@ def register_tools(mcp: FastMCP) -> None:
     async def browser_click(x: int, y: int) -> str:
         if block := await _ensure_connected():
             return block
-        await cdp.send("Input.dispatchMouseEvent", {
-            "type": "mousePressed", "x": x, "y": y, "button": "left", "clickCount": 1,
-        })
-        await cdp.send("Input.dispatchMouseEvent", {
-            "type": "mouseReleased", "x": x, "y": y, "button": "left", "clickCount": 1,
-        })
+        await cdp.send_batch([
+            ("Input.dispatchMouseEvent", {"type": "mousePressed", "x": x, "y": y, "button": "left", "clickCount": 1}),
+            ("Input.dispatchMouseEvent", {"type": "mouseReleased", "x": x, "y": y, "button": "left", "clickCount": 1}),
+        ])
         return json.dumps({"clicked": {"x": x, "y": y}})
 
     @mcp.tool(name="browser_double_click", description="指定座標 (x, y) をダブルクリックする")
     async def browser_double_click(x: int, y: int) -> str:
         if block := await _ensure_connected():
             return block
-        for click_count in [1, 2]:
-            await cdp.send("Input.dispatchMouseEvent", {
-                "type": "mousePressed", "x": x, "y": y,
-                "button": "left", "clickCount": click_count,
-            })
-            await cdp.send("Input.dispatchMouseEvent", {
-                "type": "mouseReleased", "x": x, "y": y,
-                "button": "left", "clickCount": click_count,
-            })
+        await cdp.send_batch([
+            ("Input.dispatchMouseEvent", {"type": "mousePressed", "x": x, "y": y, "button": "left", "clickCount": 1}),
+            ("Input.dispatchMouseEvent", {"type": "mouseReleased", "x": x, "y": y, "button": "left", "clickCount": 1}),
+            ("Input.dispatchMouseEvent", {"type": "mousePressed", "x": x, "y": y, "button": "left", "clickCount": 2}),
+            ("Input.dispatchMouseEvent", {"type": "mouseReleased", "x": x, "y": y, "button": "left", "clickCount": 2}),
+        ])
         return json.dumps({"double_clicked": {"x": x, "y": y}})
 
     @mcp.tool(name="browser_type", description="テキストを入力する。事前にクリックで入力欄にフォーカスしてから使う。高速（一括入力）")
@@ -145,26 +177,34 @@ def register_tools(mcp: FastMCP) -> None:
     async def browser_clear_field() -> str:
         if block := await _ensure_connected():
             return block
-        await cdp.send("Input.dispatchKeyEvent", {
-            "type": "keyDown", "key": "a", "modifiers": 2,
+        js = """
+            (() => {
+                const el = document.activeElement;
+                if (!el) return { error: 'no focused element' };
+                const nativeSetter =
+                    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set ||
+                    Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+                if (nativeSetter) nativeSetter.call(el, '');
+                else el.value = '';
+                el.dispatchEvent(new Event('input', { bubbles: true }));
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+                return { cleared: true };
+            })()
+        """
+        result = await cdp.send("Runtime.evaluate", {
+            "expression": js,
+            "returnByValue": True,
         })
-        await cdp.send("Input.dispatchKeyEvent", {
-            "type": "keyUp", "key": "a", "modifiers": 2,
-        })
-        await cdp.send("Input.dispatchKeyEvent", {
-            "type": "keyDown", "key": "Backspace",
-        })
-        await cdp.send("Input.dispatchKeyEvent", {
-            "type": "keyUp", "key": "Backspace",
-        })
-        return json.dumps({"action": "clear_field"})
+        return json.dumps(result.get("result", {}).get("value", {}), ensure_ascii=False)
 
     @mcp.tool(name="browser_press_key", description="キーボードのキーを押す（Enter, Tab, Escape 等）")
     async def browser_press_key(key: str) -> str:
         if block := await _ensure_connected():
             return block
-        await cdp.send("Input.dispatchKeyEvent", {"type": "keyDown", "key": key})
-        await cdp.send("Input.dispatchKeyEvent", {"type": "keyUp", "key": key})
+        await cdp.send_batch([
+            ("Input.dispatchKeyEvent", {"type": "keyDown", "key": key}),
+            ("Input.dispatchKeyEvent", {"type": "keyUp", "key": key}),
+        ])
         return json.dumps({"pressed": key})
 
     @mcp.tool(name="browser_scroll", description="ページをスクロールする。direction は 'up' または 'down'。amount はピクセル数（デフォルト 500）")

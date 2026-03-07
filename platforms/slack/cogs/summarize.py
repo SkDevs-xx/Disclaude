@@ -1,12 +1,12 @@
 """
 Slack /summarize-ai ハンドラ
-チャンネルの会話を 2 段階 Claude 呼び出しで要約・質問に回答する
+チャンネルの会話を 2 段階 AI Engine 呼び出しで要約・質問に回答する
 
 処理フロー:
   1. Slack API でチャンネルの全メッセージを収集して tmp ファイルに書き出す
-  2. Stage 1: ファイルの先頭・末尾サンプル + プロンプト → Claude が検索条件（JSON）を返す
+  2. Stage 1: ファイルの先頭・末尾サンプル + プロンプト → AI Engine が検索条件（JSON）を返す
   3. Python: ファイル全体をキーワード/日付でフィルタリング
-  4. Stage 2: 絞り込んだ行を Claude に渡して最終回答を生成
+  4. Stage 2: 絞り込んだ行を AI Engine に渡して最終回答を生成
   5. finally: tmp ファイルを必ず削除
 """
 
@@ -62,7 +62,7 @@ async def _get_search_criteria(
     sample_text: str,
     channel_id: str,
 ) -> dict:
-    """Stage 1: メッセージサンプル + プロンプトから検索条件を Claude で抽出する。"""
+    """Stage 1: メッセージサンプル + プロンプトから検索条件を AI Engine で抽出する。"""
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     meta_prompt = (
         f"以下は Slack チャンネルの会話ログのサンプルです。\n\n"
@@ -85,7 +85,7 @@ async def _get_search_criteria(
 
     lock = bot.get_channel_lock(channel_id)
     async with lock:
-        result, timed_out = await run_engine(meta_prompt)
+        result, timed_out, _ = await run_engine(meta_prompt)
 
     if timed_out:
         return {"use_all": True, "keywords": [], "date_from": None, "date_to": None}
@@ -262,7 +262,7 @@ def register(bot: "SlackBot"):
 
             lock = bot.get_channel_lock(channel_id)
             async with lock:
-                summary, timed_out = await run_engine(full_prompt, skill_instructions=skill_instr)
+                summary, timed_out, _ = await run_engine(full_prompt, skill_instructions=skill_instr)
 
             if timed_out:
                 await respond(text=":warning: タイムアウトしました。", replace_original=True)

@@ -19,7 +19,7 @@ _tl = threading.local()
 # ─────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent.parent
 CONFIG_FILE = BASE_DIR / "config.json"
-CLAUDE_MD_FILE = BASE_DIR / "CLAUDE.md"
+ENGINE_MD_FILE = BASE_DIR / "CLAUDE.md"
 LOG_DIR = BASE_DIR / "log"
 
 # スレッドローカルで管理するワークスペース変数のデフォルト値
@@ -68,17 +68,26 @@ def __getattr__(name: str):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-CLAUDE_BIN = shutil.which("claude") or str(Path.home() / ".local" / "bin" / "claude")
+DEFAULT_ENGINE_BIN = shutil.which("claude") or str(Path.home() / ".local" / "bin" / "claude")
+CODEX_BIN = shutil.which("codex") or str(Path.home() / ".local" / "bin" / "codex")
 TIMEOUT_FAST = 180
 TIMEOUT_PLANNING = 300
 
 
-def validate_claude_bin() -> None:
-    """CLAUDE_BIN が実行可能かを確認する。存在しない場合は SystemExit で即終了する。"""
-    if not Path(CLAUDE_BIN).is_file():
+def validate_engine_bin_path() -> None:
+    """DEFAULT_ENGINE_BIN が実行可能かを確認する。存在しない場合は SystemExit で即終了する。"""
+    if not Path(DEFAULT_ENGINE_BIN).is_file():
         import sys
-        print(f"[ERROR] Claude CLI が見つかりません: {CLAUDE_BIN}", file=sys.stderr)
-        print("  インストール方法: https://docs.anthropic.com/ja/docs/claude-code/overview", file=sys.stderr)
+        print(f"[ERROR] Engine CLI が見つかりません: {DEFAULT_ENGINE_BIN}", file=sys.stderr)
+        print("  デフォルトエンジンが見つかりません。環境を確認してください。", file=sys.stderr)
+        sys.exit(1)
+
+def validate_codex_bin() -> None:
+    """CODEX_BIN が実行可能かを確認する。存在しない場合は SystemExit で即終了する。"""
+    if not Path(CODEX_BIN).is_file():
+        import sys
+        print(f"[ERROR] Codex CLI が見つかりません: {CODEX_BIN}", file=sys.stderr)
+        print("  インストール方法: npm i -g @openai/codex", file=sys.stderr)
         sys.exit(1)
 
 def _logger() -> "logging.Logger":
@@ -152,6 +161,14 @@ def get_engine_name() -> str:
         print('例: {"engine": "claude"} または {"engine": "codex"}', file=sys.stderr)
         sys.exit(1)
     return cfg["engine"]
+
+def get_available_models() -> list[str]:
+    """現在設定されているエンジンで利用可能なモデルIDのリストを返す。"""
+    engine = get_engine_name()
+    if engine == "codex":
+        return ["gpt-5.4", "gpt-5.3", "gpt-5.2", "gpt-5.1-max", "gpt-5.1-mini"]
+    # デフォルト: claude
+    return ["sonnet", "opus", "haiku"]
 
 def save_config(cfg: dict) -> None:
     global _config_cache, _config_mtime

@@ -122,7 +122,7 @@ clive/
 ├── platforms/                       # プラットフォーム固有
 │   ├── base.py                      # PlatformContext dataclass
 │   ├── discord/
-│   │   ├── bot.py                   # ClaudeBot 本体
+│   │   ├── bot.py                   # CliveBot 本体
 │   │   ├── embeds.py                # Discord Embed 生成
 │   │   ├── utils.py                 # get_guild_channels, make_discord_collector
 │   │   ├── cogs/

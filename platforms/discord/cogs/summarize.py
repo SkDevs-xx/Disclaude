@@ -1,12 +1,12 @@
 """
 SummarizeCog: /summarize
-Discord API でチャンネルの全メッセージを取得し、2段階 Claude 呼び出しで要約・質問に回答する
+Discord API でチャンネルの全メッセージを取得し、2段階 Clive 呼び出しで要約・質問に回答する
 
 処理フロー:
   1. Discord から全メッセージを収集し /tmp/ にテキストファイルを書き出す
-  2. Stage 1: ファイルの先頭・末尾サンプル + プロンプト → Claude が検索条件 (JSON) を返す
+  2. Stage 1: ファイルの先頭・末尾サンプル + プロンプト → Clive が検索条件 (JSON) を返す
   3. Python: ファイル全体をキーワード/日付でフィルタリング
-  4. Stage 2: 絞り込んだ行を Claude に渡して最終回答を生成
+  4. Stage 2: 絞り込んだ行を Clive に渡して最終回答を生成
   5. finally: tmp ファイルを必ず削除
 """
 
@@ -29,7 +29,7 @@ from platforms.discord.embeds import make_error_embed, make_info_embed
 
 logger = logging.getLogger("discord_bot")
 
-CHAR_LIMIT = 600_000       # Stage 2 で Claude に渡す最大文字数
+CHAR_LIMIT = 600_000       # Stage 2 で Clive に渡す最大文字数
 FETCH_CHAR_CAP = 2_000_000 # Discord 収集フェーズの文字数上限（無限ループ防止）
 SAMPLE_HEAD_CHARS = 3_000  # Stage 1 に渡す先頭サンプル文字数
 SAMPLE_TAIL_CHARS = 3_000  # Stage 1 に渡す末尾サンプル文字数
@@ -42,7 +42,7 @@ class SummarizeCog(commands.Cog):
     async def _get_search_criteria(
         self, question: str, sample_text: str, channel_id: int
     ) -> dict:
-        """Stage 1: メッセージサンプル + プロンプトから検索条件を Claude で抽出する"""
+        """Stage 1: メッセージサンプル + プロンプトから検索条件を Clive で抽出する"""
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         meta_prompt = (
             f"以下はDiscordチャンネルの会話ログのサンプルです。\n\n"
@@ -64,7 +64,7 @@ class SummarizeCog(commands.Cog):
         )
 
         async with self.bot.get_channel_lock(channel_id):
-            result, timed_out = await run_engine(meta_prompt)
+            result, timed_out, _ = await run_engine(meta_prompt)
 
         if timed_out:
             return {"use_all": True, "keywords": [], "date_from": None, "date_to": None}
@@ -80,10 +80,10 @@ class SummarizeCog(commands.Cog):
 
     @app_commands.command(
         name="summarize",
-        description="このチャンネルの会話をClaudeに質問・要約する",
+        description="このチャンネルの会話をCliveに質問・要約する",
     )
     @app_commands.describe(
-        prompt="Claudeへの質問・指示（例: 先週の話題をまとめて / 株価について教えて / 省略時はデフォルト要約）",
+        prompt="Cliveへの質問・指示（例: 先週の話題をまとめて / 株価について教えて / 省略時はデフォルト要約）",
     )
     async def summarize_command(
         self,
@@ -165,7 +165,7 @@ class SummarizeCog(commands.Cog):
             tail = tail_bytes.decode("utf-8", errors="replace")[-SAMPLE_TAIL_CHARS:] if tail_bytes else ""
             sample = head + ("\n...\n" + tail if tail else "")
 
-            # ─── Stage 1: 検索条件を Claude で抽出 ───────────────────────────────
+            # ─── Stage 1: 検索条件を Clive で抽出 ───────────────────────────────
             criteria = await self._get_search_criteria(question, sample, interaction.channel_id)
 
             # ─── Python: tmp ファイルをフィルタリング ────────────────────────────
@@ -237,7 +237,7 @@ class SummarizeCog(commands.Cog):
             )
 
             async with self.bot.get_channel_lock(interaction.channel_id):
-                summary, timed_out = await run_engine(full_prompt)
+                summary, timed_out, _ = await run_engine(full_prompt)
 
             if timed_out:
                 await interaction.edit_original_response(embed=make_error_embed("タイムアウトしました。"))

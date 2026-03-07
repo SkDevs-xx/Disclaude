@@ -39,7 +39,7 @@ def _status_blocks(model: str, thinking: bool, running: bool, reply_in_thread: b
                     f"*ステータス*\n"
                     f"- モデル: *{model}*\n"
                     f"- Thinking: *{thinking_label}*\n"
-                    f"- Claude 実行中: *{'はい' if running else 'いいえ'}*\n"
+                    f"- Clive 実行中: *{'はい' if running else 'いいえ'}*\n"
                     f"- スレッド返信: *{thread_label}*"
                 ),
             },
@@ -59,11 +59,21 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("slack_bot")
 
-_MODEL_OPTIONS = [
-    {"text": {"type": "plain_text", "text": "Sonnet（高速・バランス型）"}, "value": "sonnet"},
-    {"text": {"type": "plain_text", "text": "Opus（最高精度・低速）"}, "value": "opus"},
-    {"text": {"type": "plain_text", "text": "Haiku（最速・軽量）"}, "value": "haiku"},
-]
+def _get_model_options():
+    from core.config import get_available_models
+    options = []
+    for m in get_available_models():
+        if m == "sonnet": label = "Sonnet（高速・バランス型）"
+        elif m == "opus": label = "Opus（最高精度・低速）"
+        elif m == "haiku": label = "Haiku（最速・軽量）"
+        elif m == "gpt-5.4": label = "GPT-5.4（最新・最高精度）"
+        elif m == "gpt-5.3": label = "GPT-5.3（高精度）"
+        elif m == "gpt-5.2": label = "GPT-5.2（標準・バランス型）"
+        elif m == "gpt-5.1-max": label = "GPT-5.1 Max（大容量・高速）"
+        elif m == "gpt-5.1-mini": label = "GPT-5.1 Mini（最速・軽量）"
+        else: label = m
+        options.append({"text": {"type": "plain_text", "text": label}, "value": m})
+    return options
 
 
 def _btn(action_id: str, text: str, *, primary: bool = False) -> dict:
@@ -75,12 +85,13 @@ def _btn(action_id: str, text: str, *, primary: bool = False) -> dict:
 
 def _model_blocks(model: str, thinking: bool) -> list[dict]:
     thinking_label = "ON" if thinking else "OFF"
-    matched = next((o for o in _MODEL_OPTIONS if o["value"] == model), None)
+    model_options = _get_model_options()
+    matched = next((o for o in model_options if o["value"] == model), None)
     select: dict = {
         "type": "static_select",
         "action_id": "model_select",
         "placeholder": {"type": "plain_text", "text": "モデルを選択"},
-        "options": _MODEL_OPTIONS,
+        "options": model_options,
     }
     if matched:
         select["initial_option"] = matched
@@ -342,9 +353,6 @@ def register(bot: "SlackBot"):
             async with lock:
                 session_id = get_channel_session(channel_id)
                 is_new = session_id is None
-                if is_new:
-                    session_id = str(uuid.uuid4())
-                    save_channel_session(channel_id, session_id)
 
                 task = asyncio.current_task()
                 bot.running_tasks[channel_id] = task
@@ -360,7 +368,7 @@ def register(bot: "SlackBot"):
                     + (f"\n{registry_instr}" if registry_instr else "")
                 )
                 prompt = f"[{skill_name}スキルを呼び出してください。スキルの指示に従って会話を開始してください。]"
-                response, timed_out = await run_engine(
+                response, timed_out, new_session_id = await run_engine(
                     prompt,
                     model=model,
                     thinking=thinking,
@@ -369,6 +377,9 @@ def register(bot: "SlackBot"):
                     on_process=lambda p: bot.running_processes.__setitem__(channel_id, p),
                     skill_instructions=skill_instr,
                 )
+                
+                if is_new and new_session_id:
+                    save_channel_session(channel_id, new_session_id)
 
             if timed_out:
                 await client.chat_postMessage(

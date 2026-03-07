@@ -159,7 +159,7 @@ async def _run_heartbeat_core(bot: "SlackBot"):
         return
 
     if not cfg.get("heartbeat_enabled", True):
-        logger.info("Heartbeat: disabled, skipping Claude evaluation")
+        logger.info("Heartbeat: disabled, skipping Clive evaluation")
         return
 
     now_str = datetime.now(JST).strftime("%Y-%m-%d %H:%M")
@@ -184,17 +184,17 @@ async def _run_heartbeat_core(bot: "SlackBot"):
     interval = cfg.get("heartbeat_interval_minutes", 30)
     model, _ = get_model_config()
     hb_thinking = cfg.get("heartbeat_thinking", False)
-    response, timed_out = await run_engine(
+    response, timed_out, _ = await run_engine(
         prompt, timeout=interval * 60, skill_instructions=skill_instr, model=model, thinking=hb_thinking,
     )
 
     if timed_out or not response:
-        logger.warning("Heartbeat: Claude timed out or empty response")
+        logger.warning("Heartbeat: Clive timed out or empty response")
         return
 
     if "WRAPUP_NEEDED" in response:
         await _trigger_wrapup(bot, notify_channel_id, state.get("wrapup_time", "05:00"))
-        logger.info("Heartbeat: wrapup triggered by Claude")
+        logger.info("Heartbeat: wrapup triggered by Clive")
         return
 
     report = response.replace("HEARTBEAT_OK", "").strip()
@@ -293,7 +293,7 @@ async def _compress_daily_to_weekly(guild_dir, today: date):
         "重要なポイント・決定事項・進捗を残し、冗長な詳細は省いてください。\n\n"
         + combined
     )
-    summary, timed_out = await run_engine(prompt)
+    summary, timed_out, _ = await run_engine(prompt)
     if timed_out or not summary:
         return
     await _aio.to_thread(week_file.write_text, f"# 週次サマリー ({iso_cal.year}-W{iso_cal.week:02d})\n\n{summary}\n", encoding="utf-8")
@@ -327,7 +327,7 @@ async def _compress_weekly_to_monthly(guild_dir, today: date):
         "重要なトレンド・決定事項・マイルストーンを残し、詳細は省いてください。\n\n"
         + combined
     )
-    summary, timed_out = await run_engine(prompt)
+    summary, timed_out, _ = await run_engine(prompt)
     if timed_out or not summary:
         return
     await _aio.to_thread(month_file.write_text, f"# 月次サマリー ({today.year}-{today.month:02d})\n\n{summary}\n", encoding="utf-8")

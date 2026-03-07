@@ -14,18 +14,14 @@ from core.config import (
     get_model_config,
     get_no_mention_channels, set_no_mention,
     get_channel_session, save_channel_session, delete_channel_session,
-    BASE_DIR,
+    BASE_DIR, get_available_models
 )
 from core.engine import run_engine
 from core.message import split_message
 from platforms.discord.embeds import make_info_embed, make_error_embed
 
 
-MODEL_CHOICES = [
-    discord.SelectOption(label="Sonnet", value="sonnet", description="高速・バランス型（デフォルト）"),
-    discord.SelectOption(label="Opus", value="opus", description="最高精度・低速"),
-    discord.SelectOption(label="Haiku", value="haiku", description="最速・軽量"),
-]
+
 
 
 class ModelView(discord.ui.View):
@@ -36,14 +32,20 @@ class ModelView(discord.ui.View):
         self.current_model = current_model
         self.current_thinking = current_thinking
 
-        options = [
-            discord.SelectOption(
-                label=opt.label, value=opt.value,
-                description=opt.description,
-                default=(opt.value == current_model),
-            )
-            for opt in MODEL_CHOICES
-        ]
+        options = []
+        for m in get_available_models():
+            if m == "sonnet": label, desc = "Sonnet", "高速・バランス型（デフォルト）"
+            elif m == "opus": label, desc = "Opus", "最高精度・低速"
+            elif m == "haiku": label, desc = "Haiku", "最速・軽量"
+            elif m == "gpt-5.4": label, desc = "GPT-5.4", "最新・最高精度"
+            elif m == "gpt-5.3": label, desc = "GPT-5.3", "高精度"
+            elif m == "gpt-5.2": label, desc = "GPT-5.2", "標準・バランス型"
+            elif m == "gpt-5.1-max": label, desc = "GPT-5.1 Max", "大容量・高速"
+            elif m == "gpt-5.1-mini": label, desc = "GPT-5.1 Mini", "最速・軽量"
+            else: label, desc = m, ""
+            options.append(discord.SelectOption(
+                label=label, value=m, description=desc, default=(m == current_model)
+            ))
         self.model_select = discord.ui.Select(placeholder="モデルを選択", options=options)
         self.model_select.callback = self._on_model_select
         self.add_item(self.model_select)
@@ -152,9 +154,6 @@ class SkillsListView(discord.ui.View):
                 async with lock:
                     session_id = get_channel_session(channel_id)
                     is_new = session_id is None
-                    if is_new:
-                        session_id = str(uuid.uuid4())
-                        save_channel_session(channel_id, session_id)
 
                     model, thinking = get_model_config()
                     registry_instr = self.bot.skill_registry.build_instructions(
@@ -169,7 +168,7 @@ class SkillsListView(discord.ui.View):
 
                     if channel:
                         await channel.typing()
-                    response, timed_out = await run_engine(
+                    response, timed_out, new_session_id = await run_engine(
                         prompt,
                         model=model,
                         thinking=thinking,
@@ -178,6 +177,9 @@ class SkillsListView(discord.ui.View):
                         on_process=lambda p: self.bot.running_processes.__setitem__(channel_id, p),
                         skill_instructions=skill_instr,
                     )
+                    
+                    if is_new and new_session_id:
+                        save_channel_session(channel_id, new_session_id)
 
                 if timed_out:
                     if channel:
@@ -218,13 +220,13 @@ class UtilityCog(commands.Cog):
         desc = (
             f"**モデル:** {model}\n"
             f"**Thinking:** {thinking_label}\n"
-            f"**Claude実行中:** {'はい' if self.bot.running_tasks else 'いいえ'}"
+            f"**Clive実行中:** {'はい' if self.bot.running_tasks else 'いいえ'}"
         )
         await interaction.response.send_message(
             embed=make_info_embed("ステータス", desc), ephemeral=True
         )
 
-    @app_commands.command(name="cancel", description="実行中の Claude Code タスクをキャンセルする")
+    @app_commands.command(name="cancel", description="実行中の Clive タスクをキャンセルする")
     async def cancel_command(self, interaction: discord.Interaction):
         channel_id = interaction.channel_id
         task = self.bot.running_tasks.get(channel_id)

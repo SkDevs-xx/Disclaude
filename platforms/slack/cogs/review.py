@@ -86,9 +86,6 @@ def register(bot: "SlackBot"):
         channel_id = command.get("channel_id", "")
         session_id = get_channel_session(channel_id)
         is_new = session_id is None
-        if is_new:
-            session_id = str(uuid.uuid4())
-            save_channel_session(channel_id, session_id)
 
         model, thinking = get_model_config()
         registry_instr = bot.skill_registry.build_instructions(
@@ -100,7 +97,7 @@ def register(bot: "SlackBot"):
             + (f"\n{bot.platform_context.format_hint}\n" if bot.platform_context.format_hint else "")
             + (f"\n{registry_instr}" if registry_instr else "")
         )
-        response_text, timed_out = await run_engine(
+        response_text, timed_out, new_session_id = await run_engine(
             prompt,
             model=model,
             thinking=thinking,
@@ -108,6 +105,9 @@ def register(bot: "SlackBot"):
             is_new_session=is_new,
             skill_instructions=skill_instr,
         )
+        
+        if is_new and new_session_id:
+            save_channel_session(channel_id, new_session_id)
 
         if timed_out:
             await client.chat_postMessage(

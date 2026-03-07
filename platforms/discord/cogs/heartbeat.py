@@ -333,12 +333,12 @@ class HeartbeatCog(commands.Cog):
             logger.info("Heartbeat: wrapup triggered")
             return
 
-        # Heartbeat OFF → Claude 評価スキップ（Wrapup のみ動作）
+        # Heartbeat OFF → Clive 評価スキップ（Wrapup のみ動作）
         if not cfg.get("heartbeat_enabled", True):
-            logger.info("Heartbeat: disabled, skipping Claude evaluation")
+            logger.info("Heartbeat: disabled, skipping Clive evaluation")
             return
 
-        # Claude にチェックリストを評価させる
+        # Clive にチェックリストを評価させる
         now_str = datetime.now(JST).strftime("%Y-%m-%d %H:%M")
         prompt = (
             f"現在時刻: {now_str}\n\n"
@@ -365,19 +365,19 @@ class HeartbeatCog(commands.Cog):
         interval = cfg.get("heartbeat_interval_minutes", 30)
         hb_thinking = cfg.get("heartbeat_thinking", False)
         model, _ = get_model_config()
-        response, timed_out = await run_engine(
+        response, timed_out, _ = await run_engine(
             prompt, timeout=interval * 60, skill_instructions=skill_instr,
             model=model, thinking=hb_thinking,
         )
 
         if timed_out or not response:
-            logger.warning("Heartbeat: Claude timed out or empty response")
+            logger.warning("Heartbeat: Clive timed out or empty response")
             return
 
-        # Claude が WRAPUP_NEEDED を返した場合（Python 事前判定は上で処理済み）
+        # Clive が WRAPUP_NEEDED を返した場合（Python 事前判定は上で処理済み）
         if "WRAPUP_NEEDED" in response:
             await self._trigger_wrapup(notify_channel_id, state.get("wrapup_time", "05:00"))
-            logger.info("Heartbeat: wrapup triggered by Claude")
+            logger.info("Heartbeat: wrapup triggered by Clive")
             return
 
         # HEARTBEAT_OK キーワードを除去し、レポート部分があれば送信
@@ -510,7 +510,7 @@ class HeartbeatCog(commands.Cog):
             + combined
         )
 
-        summary, timed_out = await run_engine(prompt)
+        summary, timed_out, _ = await run_engine(prompt)
         if timed_out or not summary:
             logger.warning("Heartbeat: weekly compression timed out")
             return
@@ -553,7 +553,7 @@ class HeartbeatCog(commands.Cog):
             + combined
         )
 
-        summary, timed_out = await run_engine(prompt)
+        summary, timed_out, _ = await run_engine(prompt)
         if timed_out or not summary:
             logger.warning("Heartbeat: monthly compression timed out")
             return

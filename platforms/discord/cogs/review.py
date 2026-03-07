@@ -89,19 +89,18 @@ class ReviewCog(commands.Cog):
         channel_id = interaction.channel_id
         session_id = get_channel_session(channel_id)
         is_new = session_id is None
-        if is_new:
-            session_id = str(uuid.uuid4())
-            save_channel_session(channel_id, session_id)
 
         from core.config import get_model_config
         model, thinking = get_model_config()
-        response, timed_out = await run_engine(
+        response, timed_out, new_session_id = await run_engine(
             prompt,
             model=model,
             thinking=thinking,
             session_id=session_id,
             is_new_session=is_new,
         )
+        if is_new and new_session_id:
+            save_channel_session(channel_id, new_session_id)
 
         if timed_out:
             await interaction.followup.send(

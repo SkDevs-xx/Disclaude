@@ -279,11 +279,19 @@ def register(bot: "SlackBot"):
                 {"text": {"type": "plain_text", "text": v}, "value": k}
                 for k, v in _FREQ_LABELS.items()
             ]
-            model_options = [
-                {"text": {"type": "plain_text", "text": "Sonnet（高速）"}, "value": "sonnet"},
-                {"text": {"type": "plain_text", "text": "Opus（高精度）"}, "value": "opus"},
-                {"text": {"type": "plain_text", "text": "Haiku（最速）"}, "value": "haiku"},
-            ]
+            from core.config import get_available_models
+            model_options = []
+            for m in get_available_models():
+                if m == "sonnet": label = "Sonnet（高速）"
+                elif m == "opus": label = "Opus（高精度）"
+                elif m == "haiku": label = "Haiku（最速）"
+                elif m == "gpt-5.4": label = "GPT-5.4（最新・最高精度）"
+                elif m == "gpt-5.3": label = "GPT-5.3（高精度）"
+                elif m == "gpt-5.2": label = "GPT-5.2（標準）"
+                elif m == "gpt-5.1-max": label = "GPT-5.1 Max（大容量・高速）"
+                elif m == "gpt-5.1-mini": label = "GPT-5.1 Mini（最速）"
+                else: label = m
+                model_options.append({"text": {"type": "plain_text", "text": label}, "value": m})
             thinking_options = [
                 {"text": {"type": "plain_text", "text": "OFF（通常）"}, "value": "0"},
                 {"text": {"type": "plain_text", "text": "ON（高精度・低速）"}, "value": "1"},

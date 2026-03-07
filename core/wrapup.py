@@ -106,7 +106,7 @@ async def run_wrapup(
     _logger().info("wrapup: guild=%d period=%s msgs=%d chars=%d truncated=%s",
                 guild_id, date_label, result.total_msgs, result.total_chars, result.truncated)
 
-    # ── Claude に要約を依頼 ──
+    # ── AIに要約を依頼 ──
     prompt = (
         f"{date_label} のサーバー「{guild_name}」全チャンネルの会話ログ（{result.total_msgs}件）です。\n"
         "この期間に話したこと・決めたこと・進んだこと・残ったタスクをチャンネルをまたいで簡潔にまとめてください。\n"

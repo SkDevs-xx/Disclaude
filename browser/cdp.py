@@ -100,6 +100,37 @@ class CDPClient:
             self._pending.pop(cmd_id, None)
             raise TimeoutError(f"CDP command {method} timed out after {timeout}s")
 
+    async def send_batch(self, commands: list[tuple[str, dict | None]], timeout: float = 30.0) -> list:
+        """複数CDPコマンドを一括送信し、全レスポンスを並列で待つ。
+
+        commands: [(method, params), ...] のリスト
+        Returns: レスポンスのリスト（commands と同じ順序）
+        """
+        if not self.is_connected:
+            raise ConnectionError("Not connected to Chrome CDP")
+
+        futures: list[tuple[int, asyncio.Future]] = []
+        async with self._send_lock:
+            for method, params in commands:
+                cmd_id = self._next_id
+                self._next_id += 1
+                msg: dict = {"id": cmd_id, "method": method}
+                if params:
+                    msg["params"] = params
+                fut = asyncio.get_running_loop().create_future()
+                self._pending[cmd_id] = fut
+                await self._ws.send_json(msg)
+                futures.append((cmd_id, fut))
+
+        results = []
+        for cmd_id, fut in futures:
+            try:
+                results.append(await asyncio.wait_for(fut, timeout=timeout))
+            except asyncio.TimeoutError:
+                self._pending.pop(cmd_id, None)
+                raise TimeoutError(f"CDP batch command timed out after {timeout}s")
+        return results
+
     async def get_targets(self, port: int = 9222) -> list[dict]:
         """Chrome のタブ一覧を取得する（接続不要）。"""
         session = self._session
@@ -119,7 +150,7 @@ class CDPClient:
         await self.connect(port=port, tab_index=tab_index)
 
     async def _handle_dialog_event(self, params: dict) -> None:
-        """ダイアログイベントを処理する。alertのみ自動OK、それ以外は保留してClaudeに委ねる。"""
+        """ダイアログイベントを処理する。alertのみ自動OK、それ以外は保留してCliveに委ねる。"""
         dialog_type = params.get("type", "")
         message = params.get("message", "")
         url = params.get("url", "")
@@ -131,7 +162,7 @@ class CDPClient:
                 await self.send("Page.handleJavaScriptDialog", {"accept": True})
             else:
                 # それ以外は保留 → 次のMCPツール呼び出し時にClaudeへ通知
-                logger.info("Dialog pending for Claude: type=%s url=%s message=%s", dialog_type, url, message)
+                logger.info("Dialog pending for Clive: type=%s url=%s message=%s", dialog_type, url, message)
                 self.pending_dialog = {
                     "type": dialog_type,
                     "url": url,

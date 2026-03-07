@@ -96,9 +96,9 @@ def _run_discord():
     for d in [WORKFLOW_DIR, MEMORY_DIR, ATTACHMENTS_DIR, TMP_DIR]:
         d.mkdir(parents=True, exist_ok=True)
 
-    from platforms.discord.bot import ClaudeBot
+    from platforms.discord.bot import CliveBot
     import asyncio
-    bot = ClaudeBot()
+    bot = CliveBot()
 
     original_close = bot.close
     async def custom_close():
@@ -154,7 +154,7 @@ def _run_slack():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Multi-platform Claude Bot")
+    parser = argparse.ArgumentParser(description="Multi-platform Clive Bot")
     parser.add_argument("--init-workspace", metavar="PLATFORM",
                         help="Initialize workspace for a new platform")
     parser.add_argument("--from", dest="from_platform", metavar="PLATFORM",

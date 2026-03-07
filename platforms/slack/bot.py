@@ -1,5 +1,5 @@
 """
-Slack × Claude Code Bot
+Slack × Clive
 """
 
 from __future__ import annotations
@@ -138,7 +138,7 @@ class SlackBot:
                 sched_thinking = s.get("thinking", s.get("mode") == "planning")
                 lock = self.get_channel_lock(channel_id)
                 async with lock:
-                    response, timed_out = await run_engine(
+                    response, timed_out, _ = await run_engine(
                         s["prompt"] + "\n\n" + SLACK_FORMAT_HINT,
                         model=sched_model,
                         thinking=sched_thinking,
