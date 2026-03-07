@@ -96,9 +96,7 @@ class SummarizeCog(commands.Cog):
         # スレッドにも対応: get_channel_or_thread でキャッシュ済みオブジェクトを取得
         channel = self.bot.get_channel(interaction.channel_id) or interaction.channel
         if channel is None:
-            await interaction.followup.send(
-                embed=make_error_embed("チャンネルが見つかりません。"), ephemeral=True
-            )
+            await interaction.edit_original_response(embed=make_error_embed("チャンネルが見つかりません。"))
             return
 
         question = prompt or "主なトピック・決定事項・重要な発言を簡潔に日本語でまとめてください。"
@@ -131,20 +129,16 @@ class SummarizeCog(commands.Cog):
                             truncated = True
                             break
             except discord.Forbidden:
-                await interaction.followup.send(
+                await interaction.edit_original_response(
                     embed=make_error_embed(
                         "メッセージ履歴の読み取り権限がありません。\n"
                         "Discordのチャンネル権限で「メッセージ履歴を読む」をボットに付与してください。"
-                    ),
-                    ephemeral=True,
+                    )
                 )
                 return
             except Exception as e:
                 logger.exception("summarize: history fetch error: %s", e)
-                await interaction.followup.send(
-                    embed=make_error_embed(f"メッセージ取得中にエラーが発生しました: {e}"),
-                    ephemeral=True,
-                )
+                await interaction.edit_original_response(embed=make_error_embed(f"メッセージ取得中にエラーが発生しました: {e}"))
                 return
 
             logger.info("summarize: fetched %d msgs, truncated=%s", msg_count, truncated)
@@ -154,10 +148,7 @@ class SummarizeCog(commands.Cog):
             )
 
             if msg_count == 0:
-                await interaction.followup.send(
-                    embed=make_info_embed("要約", "メッセージが見つかりませんでした。"),
-                    ephemeral=True,
-                )
+                await interaction.edit_original_response(embed=make_info_embed("要約", "メッセージが見つかりませんでした。"))
                 return
 
             # ─── tmp ファイルから先頭・末尾サンプルを生成 ──────────────────────
@@ -249,15 +240,15 @@ class SummarizeCog(commands.Cog):
                 summary, timed_out = await run_engine(full_prompt)
 
             if timed_out:
-                await interaction.followup.send(
-                    embed=make_error_embed("タイムアウトしました。"), ephemeral=True
-                )
+                await interaction.edit_original_response(embed=make_error_embed("タイムアウトしました。"))
                 return
 
             display_summary = re.sub(r'\n{2,}', '\n', summary) if summary else ""
             chunks = split_message(display_summary, max_len=2000)
-            for chunk in chunks:
-                await interaction.followup.send(content=chunk)
+            if chunks:
+                await interaction.edit_original_response(content=chunks[0])
+                for chunk in chunks[1:]:
+                    await interaction.followup.send(content=chunk)
 
         finally:
             # tmp ファイルを必ず削除

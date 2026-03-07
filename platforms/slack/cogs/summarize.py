@@ -172,16 +172,10 @@ def register(bot: "SlackBot"):
             suffix = "（収集上限到達）" if truncated else ""
 
             if msg_count == 0:
-                await client.chat_postMessage(
-                    channel=user_id,
-                    text=":information_source: メッセージが見つかりませんでした。",
-                )
+                await respond(text=":information_source: メッセージが見つかりませんでした。", replace_original=True)
                 return
 
-            await client.chat_postMessage(
-                channel=user_id,
-                text=f":speech_balloon: {msg_count}件のメッセージを取得しました{suffix}。分析中...",
-            )
+            await respond(text=f":speech_balloon: {msg_count}件のメッセージを取得しました{suffix}。分析中...", replace_original=True)
 
             # ─── Stage 1: 検索条件を抽出 ──────────────────────
             async with aiofiles.open(tmp_path, "rb") as _f:
@@ -271,16 +265,15 @@ def register(bot: "SlackBot"):
                 summary, timed_out = await run_engine(full_prompt, skill_instructions=skill_instr)
 
             if timed_out:
-                await client.chat_postMessage(
-                    channel=user_id,
-                    text=":warning: タイムアウトしました。",
-                )
+                await respond(text=":warning: タイムアウトしました。", replace_original=True)
                 return
 
             display_summary = re.sub(r"\n{3,}", "\n\n", summary) if summary else ""
             chunks = split_message(display_summary, max_len=3000)
-            for chunk in chunks:
-                await client.chat_postMessage(channel=channel_id, text=chunk)
+            if chunks:
+                await respond(text=chunks[0], replace_original=True)
+                for chunk in chunks[1:]:
+                    await client.chat_postMessage(channel=channel_id, text=chunk)
 
         finally:
             if tmp_path and tmp_path.exists():

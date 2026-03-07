@@ -38,6 +38,26 @@ class BrowserManager:
         # Xtigervnc を起動（ディスプレイのロックファイルがなければ）
         display_num = self._display.lstrip(":")
         lock_file = f"/tmp/.X{display_num}-lock"
+        sock_file = f"/tmp/.X11-unix/X{display_num}"
+
+        # Clean up stale locks if process isn't running
+        if os.path.exists(lock_file):
+            proc_running = False
+            try:
+                with open(lock_file, "r") as f:
+                    pid = int(f.read().strip())
+                os.kill(pid, 0)
+                proc_running = True
+            except Exception:
+                pass
+            
+            if not proc_running:
+                logger.info("Cleaning up stale X11 locks for %s", self._display)
+                try: os.unlink(lock_file)
+                except OSError: pass
+                try: os.unlink(sock_file)
+                except OSError: pass
+
         if not os.path.exists(lock_file):
             if not shutil.which("Xtigervnc"):
                 logger.warning("Xtigervnc not found — install with: sudo apt install tigervnc-standalone-server")

@@ -36,41 +36,45 @@ def _split_frontmatter(text: str) -> tuple[str, str]:
     return fm, body
 
 
-def load_skill(skill_md_path: Path) -> Skill | None:
-    """SKILL.md ファイルを読み込んで Skill オブジェクトを返す。
-
-    パースに失敗した場合は None を返す。
+def load_skill(skill_md_path: Path) -> tuple[Skill | None, str | None]:
+    """SKILL.md ファイルを読み込んで Skill オブジェクトとエラーメッセージのタプルを返す。
+    エラーがなければ (Skill, None)、失敗時は (None, error_msg) を返す。
     """
     try:
         text = skill_md_path.read_text(encoding="utf-8")
     except OSError as e:
+        err = f"Failed to read file: {e}"
         logger.warning("Failed to read skill file %s: %s", skill_md_path, e)
-        return None
+        return None, err
 
     fm_text, body = _split_frontmatter(text)
     if not fm_text:
+        err = "No frontmatter found (missing --- block)"
         logger.warning("No frontmatter found in %s", skill_md_path)
-        return None
+        return None, err
 
     try:
         meta = yaml.safe_load(fm_text)
     except yaml.YAMLError as e:
+        err = f"Invalid YAML: {e}"
         logger.warning("Invalid YAML in %s: %s", skill_md_path, e)
-        return None
+        return None, err
 
     if not isinstance(meta, dict):
+        err = "Frontmatter is not a YAML dictionary mapping"
         logger.warning("Frontmatter is not a mapping in %s", skill_md_path)
-        return None
+        return None, err
 
     name = meta.get("name")
     if not name:
+        err = "Missing 'name' in frontmatter"
         logger.warning("Missing 'name' in frontmatter of %s", skill_md_path)
-        return None
+        return None, err
 
     platforms_raw = meta.get("platforms", [])
     platforms = frozenset(str(p) for p in platforms_raw) if platforms_raw else frozenset()
 
-    return Skill(
+    skill = Skill(
         name=str(name),
         description=str(meta.get("description", "")),
         instructions=body,
@@ -78,3 +82,4 @@ def load_skill(skill_md_path: Path) -> Skill | None:
         platforms=platforms,
         user_invocable=bool(meta.get("user-invocable", False)),
     )
+    return skill, None

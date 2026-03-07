@@ -18,6 +18,7 @@ class SkillRegistry:
 
     def __init__(self) -> None:
         self._skills: dict[str, Skill] = {}
+        self.load_errors: list[tuple[Path, str]] = []
 
     def register(self, skill: Skill) -> None:
         """スキルを登録する。同名のスキルは上書き。"""
@@ -27,6 +28,7 @@ class SkillRegistry:
     def reload(self, skills_dir: Path) -> int:
         """スキルを再スキャンして登録する（既存の登録をクリアして再構築）。"""
         self._skills.clear()
+        self.load_errors.clear()
         return self.scan_directory(skills_dir)
 
     def scan_directory(self, skills_dir: Path) -> int:
@@ -41,10 +43,12 @@ class SkillRegistry:
             return 0
 
         for skill_file in sorted(skills_dir.rglob("SKILL.md")):
-            skill = load_skill(skill_file)
+            skill, err = load_skill(skill_file)
             if skill is not None:
                 self.register(skill)
                 count += 1
+            elif err is not None:
+                self.load_errors.append((skill_file, err))
 
         logger.info("Scanned %s: %d skill(s) loaded", skills_dir, count)
         return count

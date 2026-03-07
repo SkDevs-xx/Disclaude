@@ -281,9 +281,11 @@ def register(bot: "SlackBot"):
         channel_id = command["channel_id"]
         user_id = command["user_id"]
 
-        if not skills:
+        errors = bot.skill_registry.load_errors
+
+        if not skills and not errors:
             await client.chat_postEphemeral(
-                channel=channel_id, user=user_id, text="利用可能なスキルがありません。"
+                channel=channel_id, user=user_id, text=":information_source: 利用可能なスキルがありません。"
             )
             return
 
@@ -291,6 +293,16 @@ def register(bot: "SlackBot"):
             {"type": "section", "text": {"type": "mrkdwn", "text": "*利用可能なスキル*"}},
             {"type": "divider"},
         ]
+        if not skills:
+            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": "現在利用可能なスキルはありません。"}})
+
+        if errors:
+            err_text = ""
+            for p, err in errors:
+                err_text += f"• `{p.parent.name}`: {err}\n"
+            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*⚠️ 読み込みエラーのスキル*\n{err_text}"}})
+            blocks.append({"type": "divider"})
+
         for skill in skills:
             desc = skill.description[:80] + "…" if len(skill.description) > 80 else skill.description
             blocks.append({
