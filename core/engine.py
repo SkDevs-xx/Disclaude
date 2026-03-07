@@ -70,7 +70,7 @@ async def _run_claude_cli(
     if timeout is None:
         timeout = TIMEOUT_PLANNING if thinking else TIMEOUT_FAST
 
-    cmd = [CLAUDE_BIN, "-p", prompt, "--output-format", "text"]
+    cmd = [CLAUDE_BIN, "-p", "--output-format", "text"]
     if skill_instructions:
         cmd += ["--system-prompt", skill_instructions]
     if get_skip_permissions():
@@ -99,6 +99,7 @@ async def _run_claude_cli(
     try:
         proc = await asyncio.create_subprocess_exec(
             *cmd,
+            stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=str(BASE_DIR),
@@ -106,7 +107,9 @@ async def _run_claude_cli(
         )
         if on_process is not None:
             on_process(proc)
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+        stdout, stderr = await asyncio.wait_for(
+            proc.communicate(input=prompt.encode("utf-8")), timeout=timeout
+        )
         if proc.returncode != 0:
             err = stderr.decode("utf-8", errors="replace").strip()
             _logger().error("claude error (rc=%d): %s", proc.returncode, err)
