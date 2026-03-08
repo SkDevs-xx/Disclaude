@@ -179,9 +179,8 @@ async def handle_clive_message(
                 exclude_user_invocable=True,
             )
             skill_instr = (
-                f"[platform: {bot.platform_context.name}]\n"
-                + (f"\n{bot.platform_context.format_hint}\n" if bot.platform_context.format_hint else "")
-                + (f"\n{registry_instr}" if registry_instr else "")
+                (f"{bot.platform_context.format_hint}\n" if bot.platform_context.format_hint else "")
+                + (f"{registry_instr}\n" if registry_instr else "")
             )
             response, timed_out, new_session_id = await run_engine(
                 full_prompt,
@@ -191,6 +190,7 @@ async def handle_clive_message(
                 is_new_session=is_new,
                 on_process=lambda p: bot.running_processes.__setitem__(channel_id, p),
                 skill_instructions=skill_instr,
+                platform_name=bot.platform_context.name,
             )
             
             if is_new and new_session_id:

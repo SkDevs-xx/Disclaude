@@ -98,6 +98,7 @@ class ReviewCog(commands.Cog):
             thinking=thinking,
             session_id=session_id,
             is_new_session=is_new,
+            platform_name="discord",
         )
         if is_new and new_session_id:
             save_channel_session(channel_id, new_session_id)

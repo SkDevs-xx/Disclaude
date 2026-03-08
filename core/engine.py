@@ -37,21 +37,23 @@ async def run_engine(
     is_new_session: bool = False,
     on_process: "Callable[[asyncio.subprocess.Process], None] | None" = None,
     skill_instructions: str = "",
+    platform_name: str | None = None,
 ) -> tuple[str, bool, str | None]:
     """(response_text, timed_out, new_session_id) を返す。
 
     config.json の "engine" に応じて実装を切り替える。
     on_process: プロセス起動直後に呼ばれるコールバック。キャンセル用途。
     skill_instructions: プロンプト先頭に付加されるスキル追加指示。
+    platform_name: プロンプト先頭に付加する [platform: {name}] 用（毎ターン必須）。
     """
     engine = _cfg.get_engine_name()
     if engine == "codex":
         return await _run_codex_cli(
-            prompt, model, thinking, timeout, session_id, is_new_session, on_process, skill_instructions
+            prompt, model, thinking, timeout, session_id, is_new_session, on_process, skill_instructions, platform_name
         )
     return await _run_claude_cli(
         prompt, model, thinking, timeout,
-        session_id, is_new_session, on_process, skill_instructions,
+        session_id, is_new_session, on_process, skill_instructions, platform_name,
     )
 
 
@@ -114,8 +116,12 @@ async def _run_claude_cli(
         )
         if on_process is not None:
             on_process(proc)
+        actual_prompt = prompt
+        if platform_name:
+            actual_prompt = f"[platform: {platform_name}]\n\n{prompt}"
+        
         stdout, stderr = await asyncio.wait_for(
-            proc.communicate(input=prompt.encode("utf-8")), timeout=timeout
+            proc.communicate(input=actual_prompt.encode("utf-8")), timeout=timeout
         )
         if proc.returncode != 0:
             err = stderr.decode("utf-8", errors="replace").strip()
@@ -164,6 +170,7 @@ async def _run_codex_cli(
     is_new_session: bool,
     on_process: "Callable[[asyncio.subprocess.Process], None] | None",
     skill_instructions: str,
+    platform_name: str | None,
 ) -> tuple[str, bool, str | None]:
     """OpenAI Codex CLI を subprocess で実行する。"""
     from core.config import CODEX_BIN
@@ -182,11 +189,15 @@ async def _run_codex_cli(
     cmd += ["--model", model]
 
     # [PROMPT] を引数として末尾に追加
+    actual_prompt = prompt
+    if platform_name:
+        actual_prompt = f"[platform: {platform_name}]\n\n{prompt}"
+
     # セッション継続時はスキル指示を省略（AGENTS.md は Codex CLI が毎回読むため維持される）
     if skill_instructions and is_new_session:
-        full_prompt = f"{skill_instructions}\n\n{prompt}"
+        full_prompt = f"{skill_instructions}\n\n{actual_prompt}"
     else:
-        full_prompt = prompt
+        full_prompt = actual_prompt
     cmd.append(full_prompt)
 
     _logger().info(

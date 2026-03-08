@@ -357,9 +357,8 @@ class HeartbeatCog(commands.Cog):
             exclude_user_invocable=True,
         )
         skill_instr = (
-            f"[platform: {ctx.name}]\n"
-            + (f"\n{ctx.format_hint}\n" if ctx.format_hint else "")
-            + (f"\n{registry_instr}" if registry_instr else "")
+            (f"{ctx.format_hint}\n" if ctx.format_hint else "")
+            + (f"{registry_instr}\n" if registry_instr else "")
         )
 
         # タイムアウト = 実行間隔（次の heartbeat までに終わればよい）
@@ -367,8 +366,8 @@ class HeartbeatCog(commands.Cog):
         hb_thinking = cfg.get("heartbeat_thinking", False)
         model, _ = get_model_config()
         response, timed_out, _ = await run_engine(
-            prompt, timeout=interval * 60, skill_instructions=skill_instr,
-            model=model, thinking=hb_thinking,
+            prompt, timeout=interval * 60, skill_instructions=skill_instr, model=model, thinking=hb_thinking,
+            platform_name=ctx.name,
         )
 
         if timed_out or not response:

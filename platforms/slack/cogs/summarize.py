@@ -258,11 +258,11 @@ def register(bot: "SlackBot"):
             )
 
             from platforms.slack import SLACK_FORMAT_HINT
-            skill_instr = f"[platform: slack]\n\n{SLACK_FORMAT_HINT}"
+            skill_instr = f"{SLACK_FORMAT_HINT}"
 
             lock = bot.get_channel_lock(channel_id)
             async with lock:
-                summary, timed_out, _ = await run_engine(full_prompt, skill_instructions=skill_instr)
+                summary, timed_out, _ = await run_engine(full_prompt, skill_instructions=skill_instr, platform_name="slack")
 
             if timed_out:
                 await respond(text=":warning: タイムアウトしました。", replace_original=True)

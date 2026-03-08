@@ -161,8 +161,7 @@ class SkillsListView(discord.ui.View):
                         disabled=self.bot.platform_context.disabled_skills,
                     )
                     skill_instr = (
-                        f"[platform: {self.bot.platform_context.name}]\n"
-                        + (f"\n{registry_instr}" if registry_instr else "")
+                        (f"{registry_instr}\n" if registry_instr else "")
                     )
                     prompt = f"[{skill_name}スキルを呼び出してください。スキルの指示に従って会話を開始してください。]"
 
@@ -176,6 +175,7 @@ class SkillsListView(discord.ui.View):
                         is_new_session=is_new,
                         on_process=lambda p: self.bot.running_processes.__setitem__(channel_id, p),
                         skill_instructions=skill_instr,
+                        platform_name=self.bot.platform_context.name,
                     )
                     
                     if is_new and new_session_id:
