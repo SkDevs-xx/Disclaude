@@ -183,7 +183,7 @@ async def _run_codex_cli(
         cmd += ["resume", session_id]
 
     if thinking:
-        cmd += ["-c", "reasoning_effort=high"]
+        cmd += ["-c", "reasoning_effort=medium"]
 
     if get_skip_permissions():
         cmd.append("--dangerously-bypass-approvals-and-sandbox")

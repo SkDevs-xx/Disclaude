@@ -115,7 +115,7 @@ async def run_wrapup(
         prompt += "\n" + format_hint + "\n"
     prompt += "\n" + history_text
 
-    summary, timed_out = await run_engine(prompt)
+    summary, timed_out, _ = await run_engine(prompt, timeout=600)
 
     if timed_out or not summary or summary.startswith("エラーが発生しました"):
         return None
