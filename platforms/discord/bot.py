@@ -324,6 +324,20 @@ class CliveBot(commands.Bot):
                 ))
                 return
 
+            # シミュレーション結果ファイルがあれば優先して送信（Agent が書き出した全文）
+            sim_result_path = BASE_DIR / "platforms" / self.platform_context.name / "workspace" / "temp" / "simulation_result.md"
+            if sim_result_path.exists():
+                try:
+                    sim_content = sim_result_path.read_text(encoding="utf-8")
+                    sim_result_path.unlink()
+                    chunks = split_message(sim_content, max_len=2000)
+                    await message.reply(chunks[0])
+                    for chunk in chunks[1:]:
+                        await message.channel.send(chunk)
+                    return
+                except Exception as e:
+                    logger.warning("Failed to read simulation result file: %s", e)
+
             # Discord 表示用: 連続改行を単一改行に正規化
             display_response = re.sub(r'\n{2,}', '\n', response)
             chunks = split_message(display_response, max_len=2000)
