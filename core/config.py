@@ -76,8 +76,6 @@ def __getattr__(name: str):
 
 DEFAULT_ENGINE_BIN = shutil.which("claude") or str(Path.home() / ".local" / "bin" / "claude")
 CODEX_BIN = shutil.which("codex") or str(Path.home() / ".local" / "bin" / "codex")
-TIMEOUT_FAST = 180
-TIMEOUT_PLANNING = 300
 
 
 def validate_engine_bin_path() -> None:

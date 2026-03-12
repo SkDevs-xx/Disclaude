@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from core.config import (
+    BASE_DIR,
     load_platform_config,
     get_channel_session,
     save_channel_session,
@@ -164,6 +165,20 @@ async def handle_clive_message(
             full_prompt += f"<attachments>\n{injected_text}\n</attachments>\n"
         full_prompt = full_prompt.strip()
 
+        # slow スキルへのリクエストなら事前通知
+        for skill in bot.skill_registry.all_skills():
+            if not skill.slow:
+                continue
+            matched = user_text.lstrip().startswith(f"/{skill.name}") or (
+                skill.slow_keywords and any(kw in user_text for kw in skill.slow_keywords)
+            )
+            if matched:
+                try:
+                    await say(text="⏳ この処理は数分かかる場合があります。しばらくお待ちください...", channel=channel_id, thread_ts=thread_ts)
+                except Exception:
+                    pass
+                break
+
         lock = bot.get_channel_lock(channel_id)
         async with lock:
             session_id = get_channel_session(channel_id)
@@ -206,6 +221,21 @@ async def handle_clive_message(
                 thread_ts=thread_ts,
             )
             return
+
+        # シミュレーション結果ファイルがあれば優先して送信（Agent が書き出した全文）
+        sim_result_path = BASE_DIR / "platforms" / bot.platform_context.name / "workspace" / "temp" / "simulation_result.md"
+        if sim_result_path.exists():
+            try:
+                sim_content = sim_result_path.read_text(encoding="utf-8")
+                sim_result_path.unlink()
+                chunks = split_message(sim_content, max_len=3000)
+                for i, chunk in enumerate(chunks):
+                    if i > 0:
+                        await asyncio.sleep(1.2)
+                    await say(text=chunk, channel=channel_id, thread_ts=thread_ts)
+                return
+            except Exception as e:
+                logger.warning("Failed to read simulation result file: %s", e)
 
         display_response = re.sub(r"\n{3,}", "\n\n", response)
         chunks = split_message(display_response, max_len=3000)

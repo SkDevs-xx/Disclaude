@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 import core.config as _cfg
-from core.config import BASE_DIR, TIMEOUT_FAST, TIMEOUT_PLANNING, get_skip_permissions
+from core.config import BASE_DIR, get_skip_permissions
 
 
 def _logger() -> logging.Logger:
@@ -71,8 +71,7 @@ async def _run_claude_cli(
     """Claude Code CLI を subprocess で実行する。"""
     from core.config import DEFAULT_ENGINE_BIN
 
-    if timeout is None:
-        timeout = TIMEOUT_PLANNING if thinking else TIMEOUT_FAST
+    # timeout=None のまま（制限なし）
 
     cmd = [DEFAULT_ENGINE_BIN, "-p", "--output-format", "text"]
     if skill_instructions and is_new_session:
@@ -95,8 +94,8 @@ async def _run_claude_cli(
 
     total_len = len(prompt) + (len(skill_instructions) if skill_instructions else 0)
     _logger().info(
-        "engine=claude model=%s thinking=%s prompt_len=%d timeout=%ds",
-        model, thinking, total_len, timeout,
+        "engine=claude model=%s thinking=%s prompt_len=%d",
+        model, thinking, total_len,
     )
 
     env = dict(os.environ)
@@ -121,9 +120,11 @@ async def _run_claude_cli(
         if platform_name:
             actual_prompt = f"[platform: {platform_name}]\n\n{prompt}"
         
-        stdout, stderr = await asyncio.wait_for(
-            proc.communicate(input=actual_prompt.encode("utf-8")), timeout=timeout
-        )
+        communicate_coro = proc.communicate(input=actual_prompt.encode("utf-8"))
+        if timeout is None:
+            stdout, stderr = await communicate_coro
+        else:
+            stdout, stderr = await asyncio.wait_for(communicate_coro, timeout=timeout)
         if proc.returncode != 0:
             err = stderr.decode("utf-8", errors="replace").strip()
             _logger().error("claude error (rc=%d): %s", proc.returncode, err)
@@ -183,7 +184,7 @@ async def _run_codex_cli(
         cmd += ["resume", session_id]
 
     if thinking:
-        cmd += ["-c", "reasoning_effort=high"]
+        cmd += ["-c", "reasoning_effort=medium"]
 
     if get_skip_permissions():
         cmd.append("--dangerously-bypass-approvals-and-sandbox")
